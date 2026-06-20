@@ -98,7 +98,12 @@ def fetch_dynamic(url: str, wait_selector: Optional[str] = None,
 def to_soup(result: FetchResult) -> Optional[BeautifulSoup]:
     if not result.html:
         return None
-    return BeautifulSoup(result.html, "lxml")
+    # Prefer lxml (fast, lenient) but fall back to the stdlib parser so the
+    # production fetcher never hard-fails on a host where lxml isn't installed.
+    try:
+        return BeautifulSoup(result.html, "lxml")
+    except Exception:  # noqa: BLE001 - FeatureNotFound when lxml is absent
+        return BeautifulSoup(result.html, "html.parser")
 
 
 def fetch_from_cache(path: str) -> FetchResult:

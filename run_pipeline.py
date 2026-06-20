@@ -8,6 +8,7 @@ solicitation_id, status_line), then add it to SOURCES below.
 """
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -21,21 +22,29 @@ BASE = Path(__file__).resolve().parent
 SOURCES = [
     {
         "name": "fulton_schools",
+        # cached: parse the saved markdown; live: fetch + parse the live HTML.
         "parser": fulton_schools.parse_file,
+        "live_parser": fulton_schools.fetch_and_parse,
         "path": BASE / "data" / "raw" / "fulton_schools_solicitations_20260620.md",
     },
     # Henry County (henrycounty_purchasing_20260620.md) is saved in data/raw/ but
     # not yet wired here. Its portal is JS-rendered (OpenGov), so the raw file
     # contains only a shell page with no structured listings. A parser can be added
-    # once fetch_dynamic() captures a full render on a machine with open internet.
+    # once fetch_dynamic() captures a full render on a machine with open internet
+    # (requires: pip install playwright && playwright install chromium).
 ]
 
 
-def run() -> list[dict]:
+def run(live: bool = False) -> list[dict]:
     all_records: list[dict] = []
     for src in SOURCES:
-        records = src["parser"](str(src["path"]))
-        print(f"[ingestion] {src['name']}: {len(records)} records")
+        if live:
+            records = src["live_parser"]()
+            mode = "live"
+        else:
+            records = src["parser"](str(src["path"]))
+            mode = "cache"
+        print(f"[ingestion] {src['name']} ({mode}): {len(records)} records")
         all_records.extend(records)
 
     tagged = tag_records(all_records)
@@ -53,5 +62,10 @@ def run() -> list[dict]:
 
 
 if __name__ == "__main__":
-    result = run()
+    ap = argparse.ArgumentParser(description="RFP signal pipeline")
+    ap.add_argument("--live", action="store_true",
+                    help="fetch sources live over the network (production path); "
+                         "default reads the cached pages in data/raw/")
+    args = ap.parse_args()
+    result = run(live=args.live)
     print(json.dumps(result, indent=2))

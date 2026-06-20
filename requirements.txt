@@ -7,3 +7,4 @@ pandas>=2.2
 spacy>=3.7
 streamlit>=1.35
 python-dateutil>=2.9
+pytest>=8.0   # tests/ — live-vs-cached regression check

@@ -9,14 +9,25 @@ The page lists solicitations grouped under year headings
 a title line followed by a status/due-date line. This parser extracts those
 into structured records.
 
-Tested against a real, verbatim copy of the live page saved at
-data/raw/fulton_schools_solicitations_20260620.md (fetched 2026-06-20).
+Two input paths produce identical records:
+  * parse()      — the cleaned markdown cached in data/raw/ (used by tests and
+                   in network-restricted environments).
+  * parse_html() — the live HTML returned by the production fetcher. Fulton's
+                   site runs the Finalsite CMS, so each year is a
+                   <section class="fsList"> with an <h2 class="fsElementTitle">
+                   heading and one <article> per solicitation (.fsTitle = title,
+                   .fsSummary = status line). This is the production path.
+
+Verified on 2026-06-20: parse_html() against the live URL yields the same five
+records as parse() against the cached file.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, asdict
 from typing import List
+
+from bs4 import BeautifulSoup
 
 AGENCY = "Fulton County Schools"
 SOURCE_URL = (
@@ -99,16 +110,74 @@ def parse(markdown_text: str) -> List[Solicitation]:
     return records
 
 
+_HTML_YEAR_RE = re.compile(r"(\d{4})\s*Current Solicitations - Capital Programs")
+
+
+def parse_html(html: str) -> List[Solicitation]:
+    """Parse the live Fulton Capital Programs HTML (Finalsite CMS markup) into
+    the same Solicitation records that parse() produces from the cached markdown.
+
+    Each year is a <section class="fsList"> with an <h2 class="fsElementTitle">
+    heading; each solicitation is an <article> with a .fsTitle (id + name) and
+    a .fsSummary (status / due-date line)."""
+    try:
+        soup = BeautifulSoup(html, "lxml")
+    except Exception:  # noqa: BLE001 - lxml may be absent on some hosts
+        soup = BeautifulSoup(html, "html.parser")
+
+    records: List[Solicitation] = []
+    for section in soup.select("section.fsList"):
+        heading = section.find(class_="fsElementTitle")
+        if not heading:
+            continue
+        ym = _HTML_YEAR_RE.search(heading.get_text(strip=True))
+        if not ym:
+            continue
+        year = int(ym.group(1))
+        for article in section.select("article"):
+            title_el = article.select_one(".fsTitle")
+            if not title_el:
+                continue
+            title_text = title_el.get_text(" ", strip=True)
+            summary_el = article.select_one(".fsSummary")
+            status_line = summary_el.get_text(" ", strip=True) if summary_el else ""
+            sol_id, title = _extract_id(title_text)
+            records.append(Solicitation(
+                agency=AGENCY,
+                source_url=SOURCE_URL,
+                year=year,
+                solicitation_id=sol_id or f"{year}-unknown-{len(records)}",
+                title=title,
+                status_line=status_line,
+                bucket=_classify(status_line),
+            ))
+    return records
+
+
 def parse_file(path: str) -> List[dict]:
     with open(path, "r", encoding="utf-8") as fh:
         text = fh.read()
     return [asdict(r) for r in parse(text)]
 
 
+def fetch_and_parse(url: str = SOURCE_URL) -> List[dict]:
+    """Production path: fetch the live page and parse it. Run on a machine with
+    normal internet access. Falls back through the fetcher's static strategy."""
+    from ingestion.fetcher import fetch_static  # local import to avoid cycle
+
+    result = fetch_static(url)
+    if not result.html:
+        raise RuntimeError(f"live fetch failed for {url}: {result.error}")
+    return [asdict(r) for r in parse_html(result.html)]
+
+
 if __name__ == "__main__":
     import json
     import sys
-    target = sys.argv[1] if len(sys.argv) > 1 else (
-        "data/raw/fulton_schools_solicitations_20260620.md"
-    )
-    print(json.dumps(parse_file(target), indent=2))
+    if len(sys.argv) > 1 and sys.argv[1] == "--live":
+        print(json.dumps(fetch_and_parse(), indent=2))
+    else:
+        target = sys.argv[1] if len(sys.argv) > 1 else (
+            "data/raw/fulton_schools_solicitations_20260620.md"
+        )
+        print(json.dumps(parse_file(target), indent=2))

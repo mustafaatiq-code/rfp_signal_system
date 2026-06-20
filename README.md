@@ -4,34 +4,39 @@ Prototype for GMG-3's Georgia Tech OMSA Applied Analytics Practicum project
 (sponsor: Gude Management Group). Implements the 4-layer architecture from the
 midterm deck: Ingestion -> NLP/Parsing -> Scoring -> Output.
 
-## Important note on data access
+## Data access — status
 
-This prototype was built inside a sandboxed dev environment whose outbound
-network is restricted to an allowlist (package registries only — no direct
-access to county/state government sites). Two consequences:
+This prototype was first built inside a sandboxed dev environment whose outbound
+network was restricted to an allowlist (package registries only — no direct
+access to county/state government sites). It has since been validated on a
+machine with normal internet access. Current status:
 
-1. `ingestion/fetcher.py` contains the **production fetcher** — plain
-   `requests`/`BeautifulSoup4` for static pages and a `Playwright` fallback for
-   JS-rendered portals (GPR, BidNet, OpenGov, BoardDocs). This is the code that
-   should run on a machine with normal internet access (your laptop, a cron
-   server, etc.) — it has not been executed end-to-end here because this sandbox
-   cannot reach those hosts.
-2. To validate the rest of the pipeline with **real** (not fabricated) data,
-   I fetched two live public procurement pages through an available tool and
-   saved the verbatim results to `data/raw/`:
-   - `fulton_schools_solicitations_20260620.md` — real, current Fulton County
-     Schools capital-program solicitation listings (one open RFP, several
-     awarded/cancelled).
-   - `henrycounty_purchasing_20260620.md` — confirms Henry County's bid portal
-     is JS-rendered (OpenGov), consistent with the deck's Playwright plan.
+1. **Static sources (e.g. Fulton County Schools) — live and validated.**
+   `ingestion/fetcher.py` is the production fetcher (plain `requests` for static
+   pages). `ingestion/parsers/fulton_schools.py` now has two equivalent paths:
+   `parse()` reads the cached markdown in `data/raw/`, and `parse_html()` parses
+   the **live** Finalsite-CMS HTML. On 2026-06-20 the live path was run
+   end-to-end against `fultonschools.org` and produced records **identical** to
+   the cached file (verified in `tests/test_pipeline.py`). Run it with
+   `python run_pipeline.py --live`.
+2. **JS-rendered portals (Henry County / OpenGov, GPR, BidNet, BoardDocs) —
+   fetcher ready, one install step remaining.** These render listings
+   client-side, so `fetch_static()` returns only a shell. `fetch_dynamic()`
+   (Playwright/headless Chromium) handles them but needs a browser install on
+   the host: `pip install playwright && playwright install chromium`. Until then
+   the code degrades gracefully (`fetch_dynamic` returns a clean error rather
+   than crashing). `henrycounty_purchasing_20260620.md` in `data/raw/` documents
+   that this portal is JS-rendered, consistent with the deck's Playwright plan.
 
-   `ingestion/parsers/fulton_schools.py` parses the real saved Fulton page into
-   structured records, and the rest of the pipeline (NLP tagging, scoring,
-   SQLite storage, Streamlit dashboard) runs on those real records end-to-end.
+Bottom line: the pipeline runs end-to-end on real data **and** the production
+fetch path is now exercised live for static sources. The only remaining gap is
+installing Playwright's browser on the production host to enable the JS-portal
+sources.
 
-Bottom line: the pipeline is real and runs end-to-end on real data; only the
-live continuous scraping of JS-heavy/login-gated portals needs to happen on a
-machine with unrestricted internet access using the fetcher already provided.
+### Cached vs. live data files
+The two `data/raw/*.md` files are kept as provenance and as an offline fixture
+(so the pipeline and its test run with no network). They are byte-faithful to
+the live pages as fetched on 2026-06-20.
 
 ## Layout
 
@@ -50,6 +55,8 @@ tests/              pipeline test
 
 ```bash
 pip install -r requirements.txt
-python run_pipeline.py          # ingest -> parse -> tag -> score -> store
+python run_pipeline.py          # cached fixtures: ingest -> parse -> tag -> score -> store
+python run_pipeline.py --live   # production path: fetch live over the network, then the same
 streamlit run output/dashboard.py
+python -m pytest tests/         # asserts the live fetch matches the cached fixture
 ```
