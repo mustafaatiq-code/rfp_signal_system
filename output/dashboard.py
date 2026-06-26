@@ -38,18 +38,22 @@ st.divider()
 show_flagged_only = st.checkbox("Show only flagged-for-review opportunities", value=False)
 view = df[df["flagged_for_review"] == 1] if show_flagged_only else df
 
+cols = ["agency", "title", "year", "bucket", "due_date", "rfp_likelihood",
+        "flagged_for_review", "service_types", "signal_types",
+        "gate_reason", "source_url"]
+cols = [c for c in cols if c in view.columns]  # tolerate pre-migration DBs
+
 st.subheader("Ranked Opportunity List")
 st.dataframe(
-    view[["agency", "title", "year", "bucket", "rfp_likelihood",
-          "flagged_for_review", "service_types", "signal_types",
-          "gate_reason", "source_url"]]
-    .sort_values("rfp_likelihood", ascending=False, na_position="last"),
+    view[cols].sort_values("rfp_likelihood", ascending=False, na_position="last"),
     use_container_width=True,
     hide_index=True,
 )
 
 st.caption(
-    "Bucket 1 = confirmed active RFP (score forced to 1.0). Bucket 2 = "
-    "predicted from early signals. Records failing the relevance gate are "
-    "shown with rfp_likelihood = None and a gate_reason."
+    "Bucket 1 = confirmed active RFP with a due date still in the future "
+    "(score forced to 1.0). An active RFP whose due date has passed is "
+    "reclassified 'Expired RFP (past due)', scored on its merits, and never "
+    "flagged. Bucket 2 = predicted from early signals. Records failing the "
+    "relevance gate show rfp_likelihood = None and a gate_reason."
 )

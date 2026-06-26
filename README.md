@@ -19,19 +19,30 @@ machine with normal internet access. Current status:
    end-to-end against `fultonschools.org` and produced records **identical** to
    the cached file (verified in `tests/test_pipeline.py`). Run it with
    `python run_pipeline.py --live`.
-2. **JS-rendered portals (Henry County / OpenGov, GPR, BidNet, BoardDocs) —
-   fetcher ready, one install step remaining.** These render listings
-   client-side, so `fetch_static()` returns only a shell. `fetch_dynamic()`
-   (Playwright/headless Chromium) handles them but needs a browser install on
-   the host: `pip install playwright && playwright install chromium`. Until then
-   the code degrades gracefully (`fetch_dynamic` returns a clean error rather
-   than crashing). `henrycounty_purchasing_20260620.md` in `data/raw/` documents
-   that this portal is JS-rendered, consistent with the deck's Playwright plan.
+2. **JS-rendered portals — Playwright installed; behaviour now depends on the
+   host.** `fetch_dynamic()` (Playwright/headless Chromium) is installed and
+   verified working. It hardens two things learned from live testing: it waits
+   on `domcontentloaded` + a settle delay (SPAs never reach `networkidle`), and
+   it **detects anti-bot interstitials** and returns `fetched_via="blocked"`
+   rather than an opaque timeout.
+   - **Non-bot-walled SPAs (many OpenGov instances, BoardDocs, GPR):** will
+     render and parse normally once a per-source parser is added.
+   - **Henry County specifically (`procurement.opengov.com/portal/henryga`):**
+     served behind **Cloudflare Turnstile** ("Just a moment… performing security
+     verification"). Headless automation is challenged and never reaches the
+     listings; the backing API host returns the same wall. We do **not** try to
+     defeat the bot check (brittle, against OpenGov's terms). `henry_opengov`
+     therefore degrades gracefully — it logs the block and contributes 0 records
+     — and ships a **structure-based parser** (unit-tested on a synthetic OpenGov
+     fixture) that is ready the moment the data is reachable through a permitted
+     path: OpenGov's official API access, the portal's RSS/email bid
+     subscription, or an aggregator (BidNet Direct / GPR).
 
-Bottom line: the pipeline runs end-to-end on real data **and** the production
-fetch path is now exercised live for static sources. The only remaining gap is
-installing Playwright's browser on the production host to enable the JS-portal
-sources.
+Bottom line: the pipeline runs end-to-end on real data, the production fetch
+path is exercised **live** for static sources, and the dynamic path is installed
+and correctly reports bot-gated sources. The remaining Henry County gap is an
+**access** problem (Cloudflare), not a code gap — resolved by a permitted data
+feed rather than more scraping.
 
 ### Cached vs. live data files
 The two `data/raw/*.md` files are kept as provenance and as an offline fixture

@@ -21,7 +21,9 @@ from dataclasses import dataclass
 from datetime import date
 from typing import List, Optional
 
-from nlp.tagging import TaggedRecord
+from dateutil import parser as dateparser
+
+from nlp.tagging import TaggedRecord, DATE_RE
 
 MIN_BUDGET = 30_000
 REVIEW_THRESHOLD = 0.50
@@ -44,11 +46,18 @@ PIPELINE_STAGE_SCORE = {
     "2 - Predicted": 0.5,
     "Awarded": 0.0,   # opportunity already closed -- not actionable
     "Cancelled": 0.0,
+    "Expired RFP (past due)": 0.0,  # due date already passed -- not actionable
     "Unknown": 0.3,
 }
 
-GEOGRAPHY_KEYWORDS = ["georgia", "ga", "gwinnett", "fulton", "henry", "south fulton",
-                       "atlanta", "fdot"]  # Phase 1 = Georgia + FDOT D3 (NW Florida) footprint
+GEOGRAPHY_KEYWORDS = [
+    # Georgia
+    "georgia", "gwinnett", "fulton", "henry", "south fulton", "atlanta",
+    # Florida
+    "florida", "fdot",
+    # State abbreviations — kept short to avoid false positives ("ga" catches "saga")
+    # so we rely on full names above; " ga " and " fl " are too risky to add.
+]
 
 
 @dataclass
@@ -61,6 +70,34 @@ class ScoredOpportunity:
     bucket: str
     service_types: List[str]
     signal_types: List[str]
+    due_date: Optional[str] = None   # ISO date parsed from the status line, if any
+    is_expired: bool = False         # active RFP whose due date has already passed
+
+
+def parse_due_date(record: dict) -> Optional[date]:
+    """Pull a due date out of an Active-RFP status line
+    (e.g. 'Due Date and Time: March 24, 2026 by 2:30pm Local Time')."""
+    if record.get("bucket") != "1 - Active RFP":
+        return None
+    m = DATE_RE.search(str(record.get("status_line", "")))
+    if not m:
+        return None
+    try:
+        return dateparser.parse(m.group(0)).date()
+    except (ValueError, OverflowError):
+        return None
+
+
+def effective_bucket(record: dict, today: Optional[date] = None) -> str:
+    """Bucket as scored: a '1 - Active RFP' whose due date has passed is
+    reclassified as expired so it is neither scored 1.0 nor flagged."""
+    today = today or date.today()
+    bucket = record.get("bucket", "Unknown")
+    if bucket == "1 - Active RFP":
+        due = parse_due_date(record)
+        if due is not None and due < today:
+            return "Expired RFP (past due)"
+    return bucket
 
 
 def relevance_gate(tagged: TaggedRecord, est_budget: Optional[float],
@@ -88,7 +125,7 @@ def _recency_score(record: dict, today: Optional[date] = None) -> float:
     """Exponential decay by record year vs. today. Active/current-year
     items score highest; older awarded/cancelled items decay."""
     today = today or date.today()
-    year = record.get("year", today.year)
+    year = record.get("year") or today.year  # some sources (OpenGov) carry no year
     age_years = max(today.year - int(year), 0)
     return math.exp(-0.6 * age_years)
 
@@ -99,48 +136,59 @@ def _source_weight(tagged: TaggedRecord) -> float:
     return max(SOURCE_WEIGHTS.get(s, 0.3) for s in tagged.signal_types)
 
 
-def _pipeline_stage_score(record: dict) -> float:
-    return PIPELINE_STAGE_SCORE.get(record.get("bucket", "Unknown"), 0.3)
+def _pipeline_stage_score(bucket: str) -> float:
+    return PIPELINE_STAGE_SCORE.get(bucket, 0.3)
 
 
-def rfp_likelihood_score(tagged: TaggedRecord) -> float:
+def rfp_likelihood_score(tagged: TaggedRecord, today: Optional[date] = None) -> float:
     record = tagged.record
-    if record.get("bucket") == "1 - Active RFP":
-        return 1.0  # Active RFP = 1.0 per deck
+    today = today or date.today()
+    bucket = effective_bucket(record, today)
+    if bucket == "1 - Active RFP":
+        return 1.0  # open Active RFP (due date in the future) = 1.0 per deck
 
     score = (
         0.35 * _signal_count_norm(tagged)
-        + 0.30 * _recency_score(record)
+        + 0.30 * _recency_score(record, today)
         + 0.20 * _source_weight(tagged)
-        + 0.15 * _pipeline_stage_score(record)
+        + 0.15 * _pipeline_stage_score(bucket)
     )
     return round(min(max(score, 0.0), 1.0), 4)
 
 
-def score_opportunity(tagged: TaggedRecord, est_budget: Optional[float] = None
-                       ) -> ScoredOpportunity:
+def score_opportunity(tagged: TaggedRecord, est_budget: Optional[float] = None,
+                       today: Optional[date] = None) -> ScoredOpportunity:
     record = tagged.record
+    today = today or date.today()
     geography_text = " ".join(str(record.get(f, "")) for f in
-                               ("agency", "title", "source_url"))
+                               ("agency", "title", "source_url", "status_line"))
     passed, reason = relevance_gate(tagged, est_budget, geography_text)
+
+    bucket = effective_bucket(record, today)
+    due = parse_due_date(record)
+    is_expired = bucket == "Expired RFP (past due)"
 
     if not passed:
         return ScoredOpportunity(
             record=record, passed_gate=False, gate_reason=reason,
             rfp_likelihood=None, flagged_for_review=False,
-            bucket=record.get("bucket", "Unknown"),
+            bucket=bucket,
             service_types=tagged.service_types, signal_types=tagged.signal_types,
+            due_date=due.isoformat() if due else None, is_expired=is_expired,
         )
 
-    likelihood = rfp_likelihood_score(tagged)
+    likelihood = rfp_likelihood_score(tagged, today)
     return ScoredOpportunity(
         record=record, passed_gate=True, gate_reason=reason,
         rfp_likelihood=likelihood,
-        flagged_for_review=likelihood >= REVIEW_THRESHOLD,
-        bucket=record.get("bucket", "Unknown"),
+        # an expired RFP is never actionable, so never flagged regardless of score
+        flagged_for_review=(not is_expired) and likelihood >= REVIEW_THRESHOLD,
+        bucket=bucket,
         service_types=tagged.service_types, signal_types=tagged.signal_types,
+        due_date=due.isoformat() if due else None, is_expired=is_expired,
     )
 
 
-def score_all(tagged_records: List[TaggedRecord]) -> List[ScoredOpportunity]:
-    return [score_opportunity(t) for t in tagged_records]
+def score_all(tagged_records: List[TaggedRecord],
+              today: Optional[date] = None) -> List[ScoredOpportunity]:
+    return [score_opportunity(t, today=today) for t in tagged_records]

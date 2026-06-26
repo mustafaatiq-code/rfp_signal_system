@@ -20,29 +20,89 @@ from typing import List, Optional
 
 # Service lines called out in the midterm deck (from Gude's own proposals)
 SERVICE_TYPE_KEYWORDS = {
-    "CEI": ["cei", "construction engineering and inspection", "subsurface utility"],
-    "Planning": ["planning", "needs assessment", "comprehensive transportation plan",
-                 "feasibility study"],
-    "Program Mgmt": ["program management", "program mgmt", "cip program",
-                      "construction program"],
-    "Traffic Ops": ["traffic ops", "traffic operations", "traffic study",
-                     "signal", "itse", "intersection"],
-    "A&E": ["architectural", "engineering services", "a&e", "design services",
-            "renovation", "replacement", "classroom reconfiguration"],
+    "CEI": [
+        "cei", "construction engineering and inspection",
+        "construction engineering inspection",   # without "and" (SAM.gov style)
+        "construction inspection", "resident engineer",
+        "field inspection", "inspection services", "subsurface utility",
+    ],
+    "Planning": [
+        "planning", "needs assessment", "feasibility study",
+        "comprehensive transportation plan", "transportation planning",
+        "corridor study", "environmental impact", "environmental assessment",
+        "transportation study", "mobility study",
+    ],
+    "Program Mgmt": [
+        "program management", "program mgmt", "cip program",
+        "construction program", "program support", "program manager",
+        "project management support",
+    ],
+    "Traffic Ops": [
+        "traffic ops", "traffic operations", "traffic study",
+        "signal", "itse", "intersection", "traffic control",
+        "intelligent transportation", "its ", "congestion management",
+        "work zone", "incident management", "tmc", "traffic management",
+    ],
+    "A&E": [
+        "architectural", "engineering services", "a&e", "design services",
+        "renovation", "replacement", "highway design", "roadway design",
+        "transportation engineering", "bridge design", "drainage design",
+        "corridor design", "geotechnical", "survey services", "surveying",
+        "structures design", "pavement design", "right-of-way",
+        "classroom reconfiguration",  # kept for Fulton-style test fixture
+    ],
 }
 
 SIGNAL_TYPE_KEYWORDS = {
-    "SPLOST": ["splost", "tsplost", "esplost"],
-    "Bond Issuance": ["bond", "bond referendum", "bonds sold"],
-    "Capital Budget": ["capital budget", "capital plan", "cip"],
-    "Political Meetings": ["board minutes", "council meeting", "commission meeting",
-                            "board of education"],
-    "State Budget Session": ["appropriations", "general assembly"],
-    "Legislation": ["bill", "iija", "raise grant"],
-    "Planning Study": ["needs assessment", "planning study"],
-    "News / Press": ["press release", "news article"],
-    "Active RFP": ["due date", "rfp", "ifb", "request for proposal",
-                    "request for qualifications"],
+    "SPLOST": [
+        "splost", "tsplost", "esplost",
+        "special purpose local option sales tax",
+        "transportation special purpose",
+    ],
+    "Bond Issuance": [
+        "bond", "bond referendum", "bonds sold",
+        "revenue bond", "general obligation bond", "bond issuance",
+        "bond proceeds", "bond sale",
+    ],
+    "Capital Budget": [
+        "capital budget", "capital plan", "cip",
+        "capital improvement program", "capital improvement plan",
+        "capital project", "capital outlay",
+    ],
+    "Political Meetings": [
+        "board minutes", "council meeting", "commission meeting",
+        "board of education", "school board meeting", "school board",
+        "chamber meeting", "chamber of commerce",
+        "dot board", "gdot board", "fdot board", "dot district meeting",
+        "county commission", "city council", "board of commissioners",
+        "planning commission", "zoning board",
+    ],
+    "State Budget Session": [
+        "appropriations", "general assembly",
+        "state budget", "budget session", "house budget", "senate budget",
+        "federal appropriation", "stip", "tip amendment",
+    ],
+    "Legislation": [
+        "bill", "iija", "raise grant", "raise act",
+        "house bill", "senate bill", "act signed", "public law",
+        "infrastructure investment", "bipartisan infrastructure",
+    ],
+    "Planning Study": [
+        "needs assessment", "planning study", "corridor study",
+        "feasibility study", "master plan", "long range plan",
+        "transportation improvement program", "lrtp",
+        "environmental study", "eis ", "ea ", "environmental assessment",
+    ],
+    "News / Press": [
+        "press release", "news article", "announced", "proposed",
+        "planned", "awarded contract", "breaking ground",
+    ],
+    "Active RFP": [
+        "due date", "rfp", "ifb", "rfi", "rfq",
+        "request for proposal", "request for qualifications",
+        "request for information", "invitation for bids",
+        "solicitation", "bid opening",
+    ],
 }
 
 MONEY_RE = re.compile(r"\$\s?[\d,.]+\s?(?:[MK]|million|thousand)?", re.IGNORECASE)
