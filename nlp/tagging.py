@@ -25,6 +25,9 @@ SERVICE_TYPE_KEYWORDS = {
         "construction engineering inspection",   # without "and" (SAM.gov style)
         "construction inspection", "resident engineer",
         "field inspection", "inspection services", "subsurface utility",
+        "sidewalk", "pedestrian improvement", "pedestrian project",
+        "roadway improvement", "road improvement", "street improvement",
+        "intersection improvement", "pavement", "resurfacing",
     ],
     "Planning": [
         "planning", "needs assessment", "feasibility study",
@@ -42,6 +45,8 @@ SERVICE_TYPE_KEYWORDS = {
         "signal", "itse", "intersection", "traffic control",
         "intelligent transportation", "its ", "congestion management",
         "work zone", "incident management", "tmc", "traffic management",
+        "pedestrian signal", "crosswalk", "roundabout", "access management",
+        "safety improvement", "corridor safety",
     ],
     "A&E": [
         "architectural", "engineering services", "a&e", "design services",
@@ -49,6 +54,8 @@ SERVICE_TYPE_KEYWORDS = {
         "transportation engineering", "bridge design", "drainage design",
         "corridor design", "geotechnical", "survey services", "surveying",
         "structures design", "pavement design", "right-of-way",
+        "transit center", "design documents", "30% design", "60% design",
+        "90% design", "preliminary design", "final design",
         "classroom reconfiguration",  # kept for Fulton-style test fixture
     ],
 }

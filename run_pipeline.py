@@ -10,14 +10,67 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+from datetime import date
 from pathlib import Path
 
-from ingestion.parsers import henry_opengov, gdot_solicitation, sam_gov, fdot_pda, gpr, marta, boarddocs, arc_news
+from ingestion.parsers import henry_opengov, gdot_solicitation, sam_gov, fdot_pda, gpr, marta, boarddocs, arc_news, cobb_transportation, gwinnett_purchasing, fayette_purchasing, bidnet_direct
 from nlp.tagging import tag_records
 from scoring.engine import score_all
-from storage.db import upsert_opportunities, fetch_all
+from storage.db import upsert_opportunities, purge_expired, fetch_all
 
 BASE = Path(__file__).resolve().parent
+
+# Match "Due date: YYYY-MM-DD" (county parsers) or "Month D, YYYY" (MARTA/Fulton)
+_ISO_DUE_RE = re.compile(r"due date[:\s]+(\d{4}-\d{2}-\d{2})", re.IGNORECASE)
+_MONTH_DUE_RE = re.compile(
+    r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?"
+    r"|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+    r"\.?\s+\d{1,2},?\s+\d{4}",
+    re.IGNORECASE,
+)
+
+
+def _drop_expired(records: list[dict], today: date | None = None) -> list[dict]:
+    """Remove Active RFP records that are stale.
+
+    Stale means either:
+    - parseable due date that has already passed, OR
+    - no parseable due date but year < current year (almost certainly closed)
+    """
+    today = today or date.today()
+    current_year = today.year
+    kept = []
+    dropped = 0
+    for rec in records:
+        if rec.get("bucket") != "1 - Active RFP":
+            kept.append(rec)
+            continue
+        status = str(rec.get("status_line", ""))
+        due: date | None = None
+        m = _ISO_DUE_RE.search(status)
+        if m:
+            try:
+                due = date.fromisoformat(m.group(1))
+            except ValueError:
+                pass
+        if due is None:
+            m2 = _MONTH_DUE_RE.search(status)
+            if m2:
+                try:
+                    from dateutil import parser as dp
+                    due = dp.parse(m2.group(0)).date()
+                except Exception:
+                    pass
+        if due is not None and due < today:
+            dropped += 1
+        elif due is None and rec.get("year", current_year) < current_year:
+            dropped += 1
+        else:
+            kept.append(rec)
+    if dropped:
+        print(f"[filter] dropped {dropped} stale records (expired or year < {current_year})")
+    return kept
 
 SOURCES = [
     {
@@ -78,6 +131,34 @@ SOURCES = [
         # Returns [] when IP-blocked (degrades gracefully like GPR/GDOT).
         "live_parser": boarddocs.fetch_and_parse,
     },
+    {
+        "name": "cobb_transportation",
+        # Cobb County Dept of Transportation — dedicated transportation bids
+        # page. All records are transportation-specific (no filtering needed).
+        # Sidewalk/pedestrian projects, intersection improvements, transit
+        # center design, SS4A corridor safety, A&E prequalification lists.
+        "live_parser": cobb_transportation.fetch_and_parse,
+    },
+    {
+        "name": "gwinnett_purchasing",
+        # Gwinnett County Purchasing — general county portal, filtered for
+        # transportation titles (road/pedestrian/traffic/signal projects).
+        # Publicly accessible static HTML, no authentication required.
+        "live_parser": gwinnett_purchasing.fetch_and_parse,
+    },
+    {
+        "name": "fayette_purchasing",
+        # Fayette County Purchasing — static HTML table, publicly accessible.
+        # Filtered for transportation titles. Has active traffic signal bids.
+        "live_parser": fayette_purchasing.fetch_and_parse,
+    },
+    {
+        "name": "bidnet_direct",
+        # BidNet Direct Georgia Purchasing Group — JS-rendered SPA (Playwright).
+        # Covers 4 ARC counties: Fulton, Cherokee, Clayton, Douglas.
+        # Returns [] per county if Playwright unavailable or bot-gated.
+        "live_parser": bidnet_direct.fetch_and_parse,
+    },
 ]
 
 
@@ -102,6 +183,7 @@ def run(live: bool = False) -> list[dict]:
         print(f"[ingestion] {name} ({mode}): {len(records)} records")
         all_records.extend(records)
 
+    all_records = _drop_expired(all_records)
     tagged = tag_records(all_records)
     scored = score_all(tagged)
 
@@ -111,6 +193,9 @@ def run(live: bool = False) -> list[dict]:
           f"{n_flagged} flagged for review (>= 0.50)")
 
     upsert_opportunities(scored)
+    removed = purge_expired()
+    if removed:
+        print(f"[storage] purged {removed} expired rows from DB")
     rows = fetch_all()
     print(f"[storage] {len(rows)} rows in opportunities.sqlite3")
     return rows

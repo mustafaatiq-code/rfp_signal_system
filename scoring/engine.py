@@ -17,6 +17,7 @@ Step 3 — Review Threshold
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import date
 from typing import List, Optional
@@ -74,12 +75,29 @@ class ScoredOpportunity:
     is_expired: bool = False         # active RFP whose due date has already passed
 
 
+# ISO date in status_line, e.g. "Due date: 2026-06-23" (Cobb/Gwinnett/Fayette style)
+_ISO_DUE_RE = re.compile(r"due date[:\s]+(\d{4}-\d{2}-\d{2})", re.IGNORECASE)
+
+
 def parse_due_date(record: dict) -> Optional[date]:
-    """Pull a due date out of an Active-RFP status line
-    (e.g. 'Due Date and Time: March 24, 2026 by 2:30pm Local Time')."""
+    """Pull a due date out of an Active-RFP status line.
+
+    Handles both ISO format ('Due date: 2026-06-23', used by county parsers)
+    and spelled-out month format ('March 24, 2026', used by Fulton Schools /
+    MARTA parsers).
+    """
     if record.get("bucket") != "1 - Active RFP":
         return None
-    m = DATE_RE.search(str(record.get("status_line", "")))
+    status = str(record.get("status_line", ""))
+    # ISO format first (county parsers: Cobb, Gwinnett, Fayette, BidNet)
+    m = _ISO_DUE_RE.search(status)
+    if m:
+        try:
+            return date.fromisoformat(m.group(1))
+        except ValueError:
+            pass
+    # Spelled-out month format (Fulton Schools, MARTA)
+    m = DATE_RE.search(status)
     if not m:
         return None
     try:

@@ -50,11 +50,15 @@ TARGET_NAICS: Set[str] = {
     "237130",  # Power & Communication Line Construction — ITS infrastructure
 }
 
-# Keyword queries: fewer, more specific — better precision per free-tier call.
+# Keyword queries for SAM.gov federal opportunities.
+# NOTE: SAM.gov v2 silently ignores naicsCode, placeOfPerformanceState, AND
+# appears to treat keyword as a broad full-text match. Most GA/FL transportation
+# contracts live on state portals (GDOT/FDOT/GPR), NOT on SAM.gov. SAM.gov is
+# most useful for contracts funded directly by FHWA, Army Corps, or Amtrak.
 # 2 keywords × 2 states = 4 calls/run (well inside 10/day free limit).
 TRANSPORT_KEYWORDS = [
-    "construction engineering inspection",      # CEI — exact phrase, precise
-    "transportation engineering services",      # A&E design, planning, program mgmt
+    "highway bridge inspection",        # FHWA / Army Corps direct bridge work
+    "A-E transportation services",      # Architect-Engineer contracts (federal format)
 ]
 
 TARGET_STATES = ["GA", "FL"]

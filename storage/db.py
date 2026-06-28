@@ -91,6 +91,35 @@ def upsert_opportunities(opps: List[ScoredOpportunity],
     return count
 
 
+def purge_expired(db_path: Path = DB_PATH) -> int:
+    """Delete stale Active RFP rows. Returns count removed.
+
+    Removes rows that are:
+    - have a due_date that has already passed, OR
+    - have no due_date but year < current year (no parseable close date, clearly old)
+    """
+    from datetime import date
+    today = date.today()
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                DELETE FROM opportunities
+                WHERE bucket = '1 - Active RFP'
+                  AND (
+                    (due_date IS NOT NULL AND due_date < ?)
+                    OR (due_date IS NULL AND year < ?)
+                  )
+                """,
+                (today.isoformat(), today.year),
+            )
+            return cur.rowcount
+    finally:
+        conn.close()
+
+
 def fetch_all(db_path: Path = DB_PATH) -> List[dict]:
     conn = get_connection(db_path)
     conn.row_factory = sqlite3.Row

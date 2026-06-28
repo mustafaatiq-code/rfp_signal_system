@@ -458,3 +458,269 @@ def test_sam_gov_cei_scored_as_transport():
     cei = next(o for o in scored if "CEI" in o.record["title"])
     assert cei.passed_gate is True
     assert cei.rfp_likelihood >= 0.5
+
+
+# --- Cobb County Transportation adapter ---------------------------------------
+
+from ingestion.parsers import cobb_transportation
+
+_SYNTHETIC_COBB_HTML = """
+<html><body>
+<h2>Current Construction Bids</h2>
+<p>Hamilton Road Sidewalk (South)</p>
+<p>B2713 | Advertise Date: 5/1/2026 | Bid Date: 5/28/2026</p>
+<p><a href="/files/legal-ad-B2713.pdf">Legal Ad</a></p>
+<p>East Callaway Road Sidewalk</p>
+<p>B2743 | Advertise Date: 5/1/2026 | Bid Date: 5/28/2026</p>
+<h2>Current Requests For Proposal/Qualifications</h2>
+<p>South Cobb Transit Center 30% Design Documents</p>
+<p>B2452A | Advertise Date: 01/02/2026 | Bid Date: 02/12/2026</p>
+<h2>Upcoming Bids/RFPs</h2>
+<p>Johnson Ferry Road at Shallowford Road Intersection Improvements</p>
+<p>B2437 | Activity: Advertise | Date: TBD</p>
+<p>SS4A Multi-Corridor Safety Improvements</p>
+</body></html>
+"""
+
+
+def test_cobb_parser_extracts_current_bids():
+    recs = cobb_transportation.parse_html(_SYNTHETIC_COBB_HTML)
+    ids = [r["solicitation_id"] for r in recs]
+    assert "COBB-B2713" in ids
+    assert "COBB-B2743" in ids
+    assert "COBB-B2452A" in ids
+
+
+def test_cobb_parser_buckets_correctly():
+    recs = cobb_transportation.parse_html(_SYNTHETIC_COBB_HTML)
+    by_id = {r["solicitation_id"]: r for r in recs}
+    # Current bids → Active RFP
+    assert by_id["COBB-B2713"]["bucket"] == "1 - Active RFP"
+    assert by_id["COBB-B2452A"]["bucket"] == "1 - Active RFP"
+    # Upcoming → Predicted
+    assert by_id["COBB-B2437"]["bucket"] == "2 - Predicted"
+
+
+def test_cobb_parser_has_due_date():
+    recs = cobb_transportation.parse_html(_SYNTHETIC_COBB_HTML)
+    b2713 = next(r for r in recs if r["solicitation_id"] == "COBB-B2713")
+    assert "2026-05-28" in b2713["status_line"]
+    assert "State: Georgia" in b2713["status_line"]
+
+
+def test_cobb_transit_center_passes_gate():
+    recs = cobb_transportation.parse_html(_SYNTHETIC_COBB_HTML)
+    scored = score_all(tag_records(recs))
+    passed = [o for o in scored if o.passed_gate]
+    assert len(passed) >= 1
+
+
+# --- Gwinnett County Purchasing adapter ---------------------------------------
+
+from ingestion.parsers import gwinnett_purchasing
+
+_SYNTHETIC_GWINNETT_HTML = """
+<html><body>
+<ul>
+<li>
+  RP016-26 Old Rockbridge Road and Williams Road Pedestrian Improvement Projects
+  <br>Buyer Contact: jsmith@gwinnettcounty.com
+  <br>Opening Date: 2026-07-15 10:00:00.0 EST
+</li>
+<li>
+  BL102-26 Safety Shoes/Boots for County Staff
+  <br>Buyer Contact: jdoe@gwinnettcounty.com
+  <br>Opening Date: 2026-07-20 10:00:00.0 EST
+</li>
+<li>
+  RP017-26 McDaniel Farm Park to Satellite Boulevard Pedestrian Improvement Project
+  <br>Buyer Contact: jsmith@gwinnettcounty.com
+  <br>Opening Date: 2026-07-22 10:00:00.0 EST
+</li>
+<li>
+  BL103-26 Purchase of Traffic Control Signs and Street Name Signs
+  <br>Buyer Contact: jdoe@gwinnettcounty.com
+  <br>Opening Date: 2026-08-01 10:00:00.0 EST
+</li>
+<li>
+  IWQ005-26 Provision of Exterminating Services on an Annual Contract
+  <br>Buyer Contact: jdoe@gwinnettcounty.com
+  <br>Opening Date: 2026-07-10 10:00:00.0 EST
+</li>
+</ul>
+</body></html>
+"""
+
+
+def test_gwinnett_parser_keeps_only_transport():
+    recs = gwinnett_purchasing.parse_html(_SYNTHETIC_GWINNETT_HTML)
+    titles = [r["title"] for r in recs]
+    # Transportation records included
+    assert any("Pedestrian" in t or "Road" in t for t in titles)
+    assert any("Traffic Control Signs" in t or "Street Name" in t for t in titles)
+    # Non-transportation filtered out
+    assert not any("Safety Shoes" in t for t in titles)
+    assert not any("Exterminating" in t for t in titles)
+
+
+def test_gwinnett_parser_solicitation_ids():
+    recs = gwinnett_purchasing.parse_html(_SYNTHETIC_GWINNETT_HTML)
+    ids = [r["solicitation_id"] for r in recs]
+    assert "GWINNETT-RP016-26" in ids
+    assert "GWINNETT-RP017-26" in ids
+    assert "GWINNETT-BL103-26" in ids
+
+
+def test_gwinnett_parser_due_date_and_state():
+    recs = gwinnett_purchasing.parse_html(_SYNTHETIC_GWINNETT_HTML)
+    rp016 = next(r for r in recs if r["solicitation_id"] == "GWINNETT-RP016-26")
+    assert "2026-07-15" in rp016["status_line"]
+    assert "State: Georgia" in rp016["status_line"]
+
+
+def test_gwinnett_pedestrian_passes_gate():
+    recs = gwinnett_purchasing.parse_html(_SYNTHETIC_GWINNETT_HTML)
+    scored = score_all(tag_records(recs))
+    passed = [o for o in scored if o.passed_gate]
+    assert len(passed) >= 1
+
+
+# --- Fayette County Purchasing adapter ----------------------------------------
+
+from ingestion.parsers import fayette_purchasing
+
+_SYNTHETIC_FAYETTE_HTML = """
+<html><body>
+<table>
+<tr><th>Due Date</th><th>Description</th></tr>
+<tr>
+  <td>June 23, 2026 3:00 PM</td>
+  <td><a href="bid_detail_T5_R001.php">ITB 26136-B Traffic Signal – Banks Road and Ellis Road Construction</a></td>
+</tr>
+<tr>
+  <td>July 15, 2026 3:00 PM</td>
+  <td><a href="bid_detail_T5_R002.php">ITB 26145-B Road Resurfacing and Pavement Marking Project</a></td>
+</tr>
+<tr>
+  <td>June 12, 2026 3:00 PM</td>
+  <td><a href="bid_detail_T5_R003.php">RFQ 26067-A Lake Kedron Parking Lot Striping</a></td>
+</tr>
+<tr>
+  <td>August 1, 2026 3:00 PM</td>
+  <td><a href="bid_detail_T5_R004.php">RFP 26150-P Office Supplies Annual Contract</a></td>
+</tr>
+</table>
+</body></html>
+"""
+
+
+def test_fayette_parser_keeps_transport():
+    recs = fayette_purchasing.parse_html(_SYNTHETIC_FAYETTE_HTML)
+    titles = [r["title"] for r in recs]
+    assert any("Traffic Signal" in t for t in titles)
+    assert any("Resurfacing" in t or "Pavement" in t for t in titles)
+    assert not any("Office Supplies" in t for t in titles)
+
+
+def test_fayette_parser_solicitation_ids():
+    recs = fayette_purchasing.parse_html(_SYNTHETIC_FAYETTE_HTML)
+    ids = [r["solicitation_id"] for r in recs]
+    assert "FAYETTE-ITB-26136-B" in ids
+    assert "FAYETTE-ITB-26145-B" in ids
+
+
+def test_fayette_parser_due_date_and_state():
+    recs = fayette_purchasing.parse_html(_SYNTHETIC_FAYETTE_HTML)
+    signal = next(r for r in recs if "Traffic Signal" in r["title"])
+    assert "2026-06-23" in signal["status_line"]
+    assert "State: Georgia" in signal["status_line"]
+
+
+def test_fayette_traffic_signal_passes_gate():
+    recs = fayette_purchasing.parse_html(_SYNTHETIC_FAYETTE_HTML)
+    scored = score_all(tag_records(recs))
+    passed = [o for o in scored if o.passed_gate]
+    assert len(passed) >= 1
+
+
+# --- BidNet Direct adapter (Fulton / Cherokee / Clayton / Douglas) -------------
+
+from ingestion.parsers import bidnet_direct
+
+# Fixture mirrors the actual BidNet Direct rendered DOM structure:
+# each field occupies its own text line (sol_no, title, Georgia, Calendar,
+# Published, date, Clock, Closing, date). Parser anchors on "Closing\n<date>".
+_SYNTHETIC_BIDNET_HTML = """
+<html><body>
+<div class="bid-list">
+<div class="bid-item">
+<p>26-01</p>
+<p>Environmental Engineering and Testing Services</p>
+<p>Georgia</p><p>Calendar</p>
+<p>Published</p><p>06/01/2026</p>
+<p>Clock</p><p>Closing</p><p>07/15/2026</p>
+</div>
+<div class="bid-item">
+<p>26-02</p>
+<p>Sidewalk and Pedestrian Improvement - Cascade Road</p>
+<p>Georgia</p><p>Calendar</p>
+<p>Published</p><p>06/10/2026</p>
+<p>Clock</p><p>Closing</p><p>07/22/2026</p>
+</div>
+<div class="bid-item">
+<p>26-03</p>
+<p>Traffic Signal Modernization - Camp Creek Parkway</p>
+<p>Georgia</p><p>Calendar</p>
+<p>Published</p><p>06/12/2026</p>
+<p>Clock</p><p>Closing</p><p>08/01/2026</p>
+</div>
+<div class="bid-item">
+<p>26-04</p>
+<p>DNA Freezer and Mortuary Equipment</p>
+<p>Georgia</p><p>Calendar</p>
+<p>Published</p><p>06/14/2026</p>
+<p>Clock</p><p>Closing</p><p>08/05/2026</p>
+</div>
+</div>
+</body></html>
+"""
+
+
+def test_bidnet_parser_keeps_transport():
+    recs = bidnet_direct.parse_rendered_html(
+        _SYNTHETIC_BIDNET_HTML, "Fulton County",
+        "https://www.bidnetdirect.com/georgia/fultoncounty"
+    )
+    titles = [r["title"] for r in recs]
+    assert any("Sidewalk" in t or "Pedestrian" in t for t in titles)
+    assert any("Traffic Signal" in t for t in titles)
+    # Non-transport filtered
+    assert not any("Mortuary" in t or "DNA Freezer" in t for t in titles)
+
+
+def test_bidnet_parser_due_dates():
+    recs = bidnet_direct.parse_rendered_html(
+        _SYNTHETIC_BIDNET_HTML, "Fulton County",
+        "https://www.bidnetdirect.com/georgia/fultoncounty"
+    )
+    sidewalk = next(r for r in recs if "Sidewalk" in r["title"] or "Pedestrian" in r["title"])
+    assert "2026-07-22" in sidewalk["status_line"]
+    assert "State: Georgia" in sidewalk["status_line"]
+
+
+def test_bidnet_parser_agency_name():
+    recs = bidnet_direct.parse_rendered_html(
+        _SYNTHETIC_BIDNET_HTML, "Cherokee County",
+        "https://www.bidnetdirect.com/georgia/cherokeecounty"
+    )
+    assert all(r["agency"] == "Cherokee County" for r in recs)
+
+
+def test_bidnet_transport_passes_gate():
+    recs = bidnet_direct.parse_rendered_html(
+        _SYNTHETIC_BIDNET_HTML, "Fulton County",
+        "https://www.bidnetdirect.com/georgia/fultoncounty"
+    )
+    scored = score_all(tag_records(recs))
+    passed = [o for o in scored if o.passed_gate]
+    assert len(passed) >= 1
