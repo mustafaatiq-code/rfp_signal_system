@@ -101,8 +101,23 @@ System scored as not relevant to GMG services.
 | None | Failed relevance gate |
 
 ---
-*Refresh data: run `python run_pipeline.py --live` then reload this page.*
 """)
+
+    st.divider()
+    if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
+        import subprocess, sys
+        with st.spinner("Running pipeline — this takes ~60 seconds…"):
+            result = subprocess.run(
+                [sys.executable, "run_pipeline.py", "--live"],
+                cwd=str(Path(__file__).resolve().parent.parent),
+                capture_output=True, text=True, timeout=300,
+            )
+        if result.returncode == 0:
+            st.success("Pipeline complete — data refreshed!")
+        else:
+            st.error("Pipeline error — check terminal for details.")
+            st.code(result.stderr[-1000:] if result.stderr else "no output")
+        st.rerun()
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 st.title("Opportunity Signal Radar")
