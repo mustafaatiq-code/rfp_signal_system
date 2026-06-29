@@ -17,6 +17,58 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from storage.db import fetch_all  # noqa: E402
 
+# Ordered most-specific → most-general so the first match wins
+_WORK_TYPE_RULES = [
+    # CEI / Construction Engineering
+    (["construction engineering", "cei", "construction inspection", "construction management at risk", "cmar", "construction manager at risk"], "Construction Engineering & Inspection (CEI)"),
+    # A&E / Design
+    (["design-build", "design build", "progressive design"], "Design-Build Services"),
+    (["a&e", "architecture", "engineering services", "design services", "professional services", "rfq", "prequalif"], "A&E / Engineering Services"),
+    # Road / Pavement
+    (["lmig", "local maintenance", "local road assistance", "lra", "resurfacing", "milling", "overlay", "asphalt", "pavement"], "Road Resurfacing / Pavement Work"),
+    (["road widening", "widening", "lane addition", "road expansion"], "Road Widening"),
+    (["road reconstruction", "street reconstruction", "reconstruction"], "Road Reconstruction"),
+    # Bridge
+    (["bridge replacement", "bridge construction"], "Bridge Replacement / Construction"),
+    (["bridge repair", "bridge rehabilitation", "bridge inspection"], "Bridge Repair / Rehabilitation"),
+    (["bridge", "culvert"], "Bridge / Culvert Work"),
+    # Pedestrian / Bike
+    (["sidewalk", "ped ramp", "ada ramp", "accessibility"], "Sidewalk / ADA Accessibility"),
+    (["pedestrian", "crosswalk", "multiuse trail", "multi-use trail", "shared-use path", "greenway", "bike"], "Pedestrian & Bicycle Infrastructure"),
+    # Traffic
+    (["traffic signal", "sigops", "signal operations", "traffic operations"], "Traffic Signal / Operations"),
+    (["traffic safety", "safe streets", "ss4a"], "Traffic Safety / Safe Streets Program"),
+    (["traffic study", "traffic analysis", "traffic engineering"], "Traffic Engineering Study"),
+    (["striping", "pavement marking", "road marking"], "Pavement Marking / Striping"),
+    # Drainage / Stormwater
+    (["stormwater", "drainage", "outfall", "retention pond", "detention"], "Stormwater / Drainage Infrastructure"),
+    # Intersection / Access
+    (["intersection improvement", "roundabout", "access management", "interchange"], "Intersection / Interchange Improvement"),
+    # Corridor / Transportation Planning
+    (["corridor study", "corridor plan", "corridor improvement"], "Corridor Study / Improvement"),
+    (["transportation plan", "long range", "comprehensive plan", "mpo", "tip amendment"], "Transportation Planning"),
+    (["transit", "bus", "rail", "commuter", "brt", "bus rapid"], "Transit / Rail Infrastructure"),
+    # GDOT Major Projects (catch-all)
+    (["gdot-major", "arcgis hub", "cei solicitation status unverified"], "GDOT Active Project — CEI/A&E Opportunity"),
+    # Utilities co-located with roads
+    (["water main", "waterline", "water system", "sewer", "wastewater", "wrf", "wwtp"], "Water / Sewer (road co-location)"),
+    # SPLOST / Capital programs
+    (["splost", "tsplost", "e-splost", "cip", "capital improvement"], "SPLOST / Capital Program"),
+    # Right-of-way
+    (["right-of-way", "row support", "roe"], "Right-of-Way Services"),
+    # Misc transportation
+    (["guardrail", "traffic sign", "street sign", "signal sign"], "Safety Hardware Installation"),
+    (["grading", "earthwork", "site preparation"], "Grading / Earthwork"),
+]
+
+
+def _work_type(title: str, status_line: str = "") -> str:
+    text = (title + " " + status_line).lower()
+    for keywords, label in _WORK_TYPE_RULES:
+        if any(kw in text for kw in keywords):
+            return label
+    return "General Transportation / Infrastructure"
+
 st.set_page_config(page_title="GMG Opportunity Signal Radar", layout="wide")
 
 # ── Sidebar: action guide ─────────────────────────────────────────────────────
@@ -64,6 +116,9 @@ if not rows:
 df = pd.DataFrame(rows)
 df["service_types"] = df["service_types"].apply(lambda s: ", ".join(json.loads(s or "[]")))
 df["signal_types"] = df["signal_types"].apply(lambda s: ", ".join(json.loads(s or "[]")))
+df["work_type"] = df.apply(
+    lambda r: _work_type(str(r.get("title", "")), str(r.get("status_line", ""))), axis=1
+)
 
 # ── Compute "Next Step" for every row ─────────────────────────────────────────
 today = date.today()
@@ -142,7 +197,7 @@ if agency_filter != "All":
 st.subheader(f"Ranked Opportunity List ({len(view)} records)")
 
 display_cols = [
-    "next_step", "agency", "title", "bucket", "due_date",
+    "next_step", "work_type", "agency", "title", "bucket", "due_date",
     "rfp_likelihood", "service_types", "signal_types",
     "gate_reason", "source_url",
 ]
@@ -153,7 +208,8 @@ st.dataframe(
     use_container_width=True,
     hide_index=True,
     column_config={
-        "next_step": st.column_config.TextColumn("Next Step", width="large"),
+        "next_step": st.column_config.TextColumn("Next Step", width="medium"),
+        "work_type": st.column_config.TextColumn("Work Type", width="medium"),
         "rfp_likelihood": st.column_config.NumberColumn("Score", format="%.2f"),
         "source_url": st.column_config.LinkColumn("Source URL"),
         "due_date": st.column_config.TextColumn("Due Date"),
