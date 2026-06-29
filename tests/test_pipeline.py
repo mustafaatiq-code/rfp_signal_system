@@ -30,6 +30,8 @@ sys.path.insert(0, str(BASE))
 from ingestion.parsers import fulton_schools as fs  # noqa: E402
 from ingestion.parsers import henry_opengov as henry  # noqa: E402
 from ingestion.parsers import sam_gov, fdot_pda, gpr, marta, arc_news, boarddocs  # noqa: E402
+from ingestion.parsers import gdot_major_projects  # noqa: E402
+from ingestion.parsers import bartow_county, newton_county  # noqa: E402
 from ingestion.fetcher import looks_like_antibot  # noqa: E402
 from nlp.tagging import tag_records  # noqa: E402
 from scoring.engine import score_all  # noqa: E402
@@ -260,17 +262,17 @@ def test_fdot_pda_returns_empty_with_mocked_forbidden(monkeypatch):
     assert fdot_pda.fetch_and_parse() == []
 
 
-def test_gpr_returns_empty_on_403(monkeypatch):
-    """fetch_and_parse() must return [] when GPR returns 403."""
-    from ingestion import fetcher as ft
-    from ingestion.fetcher import FetchResult
+def test_gpr_returns_empty_on_network_error(monkeypatch):
+    """fetch_and_parse() must return [] when the session warm-up fails."""
+    import requests as req
 
-    def fake_static(url, **kw):
-        return FetchResult(url=url, status_code=403,
-                           html="<html><body><h1>403 Forbidden</h1></body></html>",
-                           fetched_via="error")
+    class _BadSession:
+        def get(self, *a, **kw):
+            raise req.exceptions.ConnectionError("simulated network error")
+        def post(self, *a, **kw):
+            raise req.exceptions.ConnectionError("simulated network error")
 
-    monkeypatch.setattr(ft, "fetch_static", fake_static)
+    monkeypatch.setattr(req, "Session", _BadSession)
     assert gpr.fetch_and_parse() == []
 
 
@@ -724,3 +726,147 @@ def test_bidnet_transport_passes_gate():
     scored = score_all(tag_records(recs))
     passed = [o for o in scored if o.passed_gate]
     assert len(passed) >= 1
+
+
+# ---------------------------------------------------------------------------
+# GDOT Major Projects
+# ---------------------------------------------------------------------------
+_SYNTHETIC_GDOT_MAJOR_HTML = """
+<html><body>
+<div class="content">
+  <h2>Interchange Projects</h2>
+  <ul>
+    <li><a href="https://i-16andi-75interchange-gdot.hub.arcgis.com/">I-16/I-75 Interchange</a></li>
+    <li><a href="https://sr-74-i-85-interchange-improvements-gdot.hub.arcgis.com/">I-85 @ SR 74 Interchange Improvements</a></li>
+  </ul>
+  <h2>Improvement Projects</h2>
+  <ul>
+    <li><a href="https://i285w-pavement-reconst-gdot.hub.arcgis.com/">I-285 Westside Rebuild</a></li>
+    <li><a href="https://sr5wideningproject-gdot.hub.arcgis.com/">SR 5 Widening Project</a></li>
+    <li><a href="https://not-a-gdot-link.example.com/">Not a GDOT project</a></li>
+  </ul>
+</div>
+</body></html>
+"""
+
+
+def test_gdot_major_parses_projects():
+    recs = gdot_major_projects.parse_html(_SYNTHETIC_GDOT_MAJOR_HTML)
+    titles = [r["title"] for r in recs]
+    assert "I-16/I-75 Interchange" in titles
+    assert "I-285 Westside Rebuild" in titles
+    assert "SR 5 Widening Project" in titles
+    assert not any("Not a GDOT" in t for t in titles)
+
+
+def test_gdot_major_record_count():
+    recs = gdot_major_projects.parse_html(_SYNTHETIC_GDOT_MAJOR_HTML)
+    assert len(recs) == 4
+
+
+def test_gdot_major_bucket_and_agency():
+    recs = gdot_major_projects.parse_html(_SYNTHETIC_GDOT_MAJOR_HTML)
+    for r in recs:
+        assert r["bucket"] == "2 - Predicted"
+        assert r["agency"] == "Georgia DOT"
+        assert "Georgia" in r["status_line"]
+        assert "unverified" in r["status_line"]
+
+
+def test_gdot_major_passes_gate():
+    recs = gdot_major_projects.parse_html(_SYNTHETIC_GDOT_MAJOR_HTML)
+    scored = score_all(tag_records(recs))
+    passed = [o for o in scored if o.passed_gate]
+    assert len(passed) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Bartow County
+# ---------------------------------------------------------------------------
+
+_BARTOW_HTML = """
+<html><body>
+<a href="Purchasing/RFQ-26-001-road-resurfacing.pdf">RFQ 26-001 Road Resurfacing Program 2026</a>
+<a href="Purchasing/RFQ-26-001-addendum.pdf">RFQ 26-001 Addendum 1</a>
+<a href="Purchasing/RFP-26-002-animal-shelter.pdf">RFP 26-002 Animal Shelter Renovation</a>
+<a href="Purchasing/RFQ-26-003-sidewalk.pdf">RFQ 26-003 Sidewalk Improvement District 5</a>
+</body></html>
+"""
+
+
+def test_bartow_parses_transport_only():
+    recs = bartow_county.parse_html(_BARTOW_HTML)
+    titles = [r["title"] for r in recs]
+    assert any("Road Resurfacing" in t for t in titles)
+    assert any("Sidewalk" in t for t in titles)
+    assert not any("Animal Shelter" in t for t in titles)
+
+
+def test_bartow_skips_addenda():
+    recs = bartow_county.parse_html(_BARTOW_HTML)
+    assert not any("Addendum" in r["title"] for r in recs)
+
+
+def test_bartow_bucket_predicted():
+    recs = bartow_county.parse_html(_BARTOW_HTML)
+    for r in recs:
+        assert r["bucket"] == "2 - Predicted"
+        assert r["agency"] == "Bartow County"
+
+
+# ---------------------------------------------------------------------------
+# Newton County (CivicEngage — currently no open bids)
+# ---------------------------------------------------------------------------
+
+_NEWTON_NO_BIDS_HTML = """
+<html><body>
+<p>There are no open bid postings at this time.</p>
+</body></html>
+"""
+
+_NEWTON_WITH_BID_HTML = """
+<html><body>
+<a href="/BidDetail.aspx?ID=123">SR-142 Bridge Replacement Project</a>
+<span>Closing Date: 08/15/2026</span>
+</body></html>
+"""
+
+
+def test_newton_empty_when_no_bids():
+    recs = newton_county.parse_html(_NEWTON_NO_BIDS_HTML)
+    assert recs == []
+
+
+def test_newton_parses_transport_bid():
+    recs = newton_county.parse_html(_NEWTON_WITH_BID_HTML)
+    assert len(recs) == 1
+    assert "Bridge" in recs[0]["title"]
+    assert recs[0]["agency"] == "Newton County"
+
+
+# ---------------------------------------------------------------------------
+# GPR — helper function unit tests (no network needed)
+# ---------------------------------------------------------------------------
+
+from ingestion.parsers.gpr import _is_transport, _parse_due_date  # noqa: E402
+
+
+def test_gpr_is_transport_positive():
+    assert _is_transport("2026 Chamblee LMIG Roadway Resurfacing")
+    assert _is_transport("Wilson Avenue Pedestrian Improvements CDBG")
+    assert _is_transport("Franklin Gateway Bridge Replacement")
+    assert _is_transport("Traffic Signal Operations Program")
+
+
+def test_gpr_is_transport_negative():
+    assert not _is_transport("Janitorial Services RFP 2026")
+    assert not _is_transport("Annual Software License Renewal")
+    assert not _is_transport("Food Service Equipment Bid")
+
+
+def test_gpr_parse_due_date():
+    from datetime import date as dt
+    d = _parse_due_date("Jul 09, 2026 @ 02:00 PM")
+    assert d == dt(2026, 7, 9)
+    assert _parse_due_date("") is None
+    assert _parse_due_date("TBD") is None

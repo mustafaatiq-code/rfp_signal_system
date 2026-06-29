@@ -14,7 +14,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-from ingestion.parsers import henry_opengov, gdot_solicitation, sam_gov, fdot_pda, gpr, marta, boarddocs, arc_news, cobb_transportation, gwinnett_purchasing, fayette_purchasing, bidnet_direct
+from ingestion.parsers import henry_opengov, gdot_solicitation, gdot_major_projects, sam_gov, fdot_pda, gpr, marta, boarddocs, arc_news, cobb_transportation, gwinnett_purchasing, fayette_purchasing, bidnet_direct, bartow_county, newton_county
 from nlp.tagging import tag_records
 from scoring.engine import score_all
 from storage.db import upsert_opportunities, purge_expired, fetch_all
@@ -91,6 +91,13 @@ SOURCES = [
         "live_parser": gdot_solicitation.fetch_and_parse,
     },
     {
+        "name": "gdot_major_projects",
+        # GDOT Major Projects page — publicly accessible, no auth required.
+        # Lists active major GDOT construction/design projects (CEI, A&E signals).
+        # Each record links to its ArcGIS Hub project page for full details.
+        "live_parser": gdot_major_projects.fetch_and_parse,
+    },
+    {
         "name": "sam_gov",
         # SAM.gov federal transportation opportunities (GA + FL).
         # Requires SAM_GOV_API_KEY env var (free, 10 req/day).
@@ -106,9 +113,11 @@ SOURCES = [
     },
     {
         "name": "gpr",
-        # Georgia Procurement Registry — LOCAL GOVERNMENTS only (counties,
-        # cities, school boards). State agencies use GA@WORK. Returns 403
-        # (IP-restricted or auth required). Degrades gracefully.
+        # Georgia Procurement Registry — public bid portal for all Georgia local
+        # governments (counties, cities, school boards). Requires Chrome User-Agent
+        # to bypass browser-detection middleware; no login needed. Fetches
+        # Construction/PublicWorks + DesignProfessional categories and filters
+        # locally by transportation keywords. Typically 60+ transport bids.
         "live_parser": gpr.fetch_and_parse,
     },
     {
@@ -158,6 +167,20 @@ SOURCES = [
         # Covers 4 ARC counties: Fulton, Cherokee, Clayton, Douglas.
         # Returns [] per county if Playwright unavailable or bot-gated.
         "live_parser": bidnet_direct.fetch_and_parse,
+    },
+    {
+        "name": "bartow_county",
+        # Bartow County Projects for Bid — static HTML listing PDF-linked bids.
+        # No due dates in HTML (inside PDF); records bucketed as "2 - Predicted".
+        # Stale filter auto-drops 2024-numbered bids; new 2026 bids picked up
+        # when county posts them. Bartow has active Transit dept and MPO.
+        "live_parser": bartow_county.fetch_and_parse,
+    },
+    {
+        "name": "newton_county",
+        # Newton County Bid Postings — CivicEngage platform.
+        # Returns empty list when no bids are posted; pick up future bids.
+        "live_parser": newton_county.fetch_and_parse,
     },
 ]
 
