@@ -578,7 +578,8 @@ if due_window != "Any":
             return datetime.strptime(str(val)[:10], "%Y-%m-%d").date()
         except Exception:
             return None
-    view["_due_obj"] = view["due_date"].apply(_due_date_obj)
+    # Use assign() to avoid pandas 3.0 Copy-on-Write ChainedAssignmentError
+    view = view.assign(_due_obj=view["due_date"].apply(_due_date_obj))
     if due_window == "Due in 7 days":
         view = view[view["_due_obj"].apply(lambda d: d is not None and today <= d <= today + pd.Timedelta(days=7))]
     elif due_window == "Due in 30 days":
