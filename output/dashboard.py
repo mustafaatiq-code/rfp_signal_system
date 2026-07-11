@@ -292,11 +292,14 @@ if st.session_state.selected_id is not None:
 
     row = df[df["solicitation_id"].astype(str) == str(st.session_state.selected_id)]
     if not row.empty:
-        r = row.iloc[0]
-        ns = r.get("next_step", "")
-        score_val = r.get("rfp_likelihood")
-        bucket_val = str(r.get("bucket", ""))
-        url = r.get("source_url", "")
+        # Convert NaN → None so no widget ever receives a float NaN
+        _raw = row.iloc[0]
+        r = {k: (None if pd.isna(v) else v) if isinstance(v, float) else v
+             for k, v in _raw.items()}
+        ns = r.get("next_step") or ""
+        score_val = r.get("rfp_likelihood")  # None if NULL/NaN
+        bucket_val = str(r.get("bucket") or "")
+        url = str(r.get("source_url") or "")
 
         # ── Compact title + status bar ────────────────────────────────────────
         st.markdown(f"### {r['title']}")
