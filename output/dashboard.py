@@ -65,12 +65,13 @@ st.markdown("""
 <style>
 /* Remove Streamlit's default top padding */
 .block-container {
-    padding-top: 1.5rem !important;
+    padding-top: 3rem !important;
     padding-bottom: 1rem !important;
 }
-/* Hide the top toolbar but keep the sidebar expand arrow visible */
-header[data-testid="stHeader"] { visibility: hidden; }
-header[data-testid="stHeader"] [data-testid="collapsedControl"] { visibility: visible !important; }
+/* Shrink the top header bar height so it doesn't take much space */
+header[data-testid="stHeader"] { min-height: 2rem !important; }
+/* Make the collapsed sidebar control always visible and easy to click */
+[data-testid="collapsedControl"] { visibility: visible !important; display: flex !important; }
 /* Compact bordered cards */
 section[data-testid="stVerticalBlockBorderWrapper"] > div:first-child {
     padding-top: 6px !important;
