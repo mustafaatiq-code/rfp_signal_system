@@ -394,7 +394,11 @@ if st.session_state.selected_id is not None:
             raw_signals = [s.strip() for s in str(r.get("signal_types") or "").split(",") if s.strip()]
             n_sig = len(raw_signals)
             signal_norm = round(min(n_sig, 4) / 4, 4)
-            age = max(date.today().year - int(r.get("year") or date.today().year), 0)
+            try:
+                _yr = r.get("year")
+                age = max(date.today().year - int(_yr), 0) if _yr and str(_yr) != "nan" else 0
+            except (ValueError, TypeError):
+                age = 0
             recency = round(math.exp(-0.6 * age), 4)
             raw_sw = max((_SOURCE_W.get(s, 0.3) for s in raw_signals), default=0.2) if raw_signals else 0.2
             if "Predicted" in bucket_val:
