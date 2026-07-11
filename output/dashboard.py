@@ -85,23 +85,6 @@ section[data-testid="stVerticalBlockBorderWrapper"] {
 h2, h3 { margin-top: 0.3rem !important; margin-bottom: 0.3rem !important; }
 /* Hide Streamlit's auto-added anchor link icon on headings */
 h2 a, h3 a { display: none !important; }
-/* Fixed sidebar width */
-section[data-testid="stSidebar"] {
-    width: 270px !important;
-    min-width: 270px !important;
-}
-section[data-testid="stSidebar"] > div:first-child {
-    width: 270px !important;
-}
-/* Keep collapse arrow visible so sidebar can be toggled */
-/* On mobile: show sidebar as a readable overlay, don't let it stretch full screen */
-@media (max-width: 768px) {
-    section[data-testid="stSidebar"] {
-        width: 85vw !important;
-        min-width: 260px !important;
-        max-width: 320px !important;
-    }
-}
 </style>
 """, unsafe_allow_html=True)
 
