@@ -202,7 +202,11 @@ with st.sidebar:
 st.markdown("## Opportunity Signal Radar")
 st.caption("RFP Signal Detection & Opportunity Scoring System — GMG-3 Practicum")
 
-refresh_expired_buckets()
+try:
+    refresh_expired_buckets()
+except Exception:
+    pass  # DB is read-only on Streamlit Cloud — fall back to in-memory fix below
+
 rows = fetch_all()
 if not rows:
     st.warning("No data yet. Run `python run_pipeline.py` first.")
@@ -211,6 +215,21 @@ if not rows:
 df = pd.DataFrame(rows)
 df["service_types"] = df["service_types"].apply(lambda s: ", ".join(json.loads(s or "[]")))
 df["signal_types"] = df["signal_types"].apply(lambda s: ", ".join(json.loads(s or "[]")))
+
+# In-memory bucket correction for read-only deployments (Streamlit Cloud):
+# reclassify Active RFPs with past due dates and Awarded/Cancelled records.
+_today_str = date.today().isoformat()
+def _fix_bucket(row):
+    b = row["bucket"]
+    if b in ("Awarded", "Cancelled"):
+        return "Expired RFP (past due)"
+    if b == "1 - Active RFP":
+        due = row.get("due_date")
+        if due and str(due)[:10] < _today_str:
+            return "Expired RFP (past due)"
+    return b
+df["bucket"] = df.apply(_fix_bucket, axis=1)
+
 df["work_type"] = df.apply(
     lambda r: _work_type(str(r.get("title", "")), str(r.get("status_line", ""))), axis=1
 )
