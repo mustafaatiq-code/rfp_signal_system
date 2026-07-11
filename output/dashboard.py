@@ -68,8 +68,9 @@ st.markdown("""
     padding-top: 1.5rem !important;
     padding-bottom: 1rem !important;
 }
-/* Hide the top toolbar visually without collapsing it (prevents title clipping) */
+/* Hide the top toolbar but keep the sidebar expand arrow visible */
 header[data-testid="stHeader"] { visibility: hidden; }
+header[data-testid="stHeader"] [data-testid="collapsedControl"] { visibility: visible !important; }
 /* Compact bordered cards */
 section[data-testid="stVerticalBlockBorderWrapper"] > div:first-child {
     padding-top: 6px !important;
