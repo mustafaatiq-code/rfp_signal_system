@@ -85,11 +85,23 @@ section[data-testid="stVerticalBlockBorderWrapper"] {
 h2, h3 { margin-top: 0.3rem !important; margin-bottom: 0.3rem !important; }
 /* Hide Streamlit's auto-added anchor link icon on headings */
 h2 a, h3 a { display: none !important; }
-/* Hide ALL sidebar collapse/expand controls */
-[data-testid="collapsedControl"] { display: none !important; }
-button[kind="header"] { display: none !important; }
-[data-testid="stSidebarCollapseButton"] { display: none !important; }
-section[data-testid="stSidebar"] > div:first-child > div:first-child > div:last-child { display: none !important; }
+/* Fixed sidebar width */
+section[data-testid="stSidebar"] {
+    width: 270px !important;
+    min-width: 270px !important;
+}
+section[data-testid="stSidebar"] > div:first-child {
+    width: 270px !important;
+}
+/* Keep collapse arrow visible so sidebar can be toggled */
+/* On mobile: show sidebar as a readable overlay, don't let it stretch full screen */
+@media (max-width: 768px) {
+    section[data-testid="stSidebar"] {
+        width: 85vw !important;
+        min-width: 260px !important;
+        max-width: 320px !important;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -111,76 +123,26 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**Score Legend**")
-    st.markdown("""
-| Score | Meaning |
-|---|---|
-| 1.00 | Confirmed open solicitation |
-| 0.7–0.99 | Strong early signal |
-| 0.5–0.69 | Moderate signal — monitor |
-| < 0.5 | Weak signal or failed gate |
-""")
+    st.caption("**1.00** — Confirmed open solicitation")
+    st.caption("**0.70–0.99** — Strong early signal")
+    st.caption("**0.50–0.69** — Moderate signal, monitor")
+    st.caption("**< 0.50** — Weak signal or failed gate")
 
     st.divider()
     st.markdown("**Scoring Formula**")
-    st.caption("Score = sum of four weighted components:")
-    st.markdown("""
-| Component | Weight | What it measures |
-|---|---|---|
-| Signal Count | 35% | No. of signal types detected (max 4) |
-| Recency | 30% | How recent the record is (decays with age) |
-| Source Strength | 20% | Quality of the funding/procurement signal |
-| Pipeline Stage | 15% | How far along toward an active RFP |
-""")
+    st.caption("Score = weighted sum of four components:")
 
-    st.markdown("**Signal Count** *(35% weight)*")
-    st.caption("Number of distinct signal types found in the record, normalized to a 0–1 scale (max 4 signals = 1.00).")
-    st.markdown("""
-| Signals detected | Value |
-|---|---|
-| 4 or more | 1.00 |
-| 3 | 0.75 |
-| 2 | 0.50 |
-| 1 | 0.25 |
-| 0 | 0.00 |
-""")
+    st.markdown("**Signal Count** (35%)")
+    st.caption("Distinct signal types detected (max 4). 4→1.00 · 3→0.75 · 2→0.50 · 1→0.25 · 0→0.00")
 
-    st.markdown("**Recency** *(30% weight)*")
-    st.caption("Exponential decay applied to the record year — older records score lower (45% decay per year).")
-    st.markdown("""
-| Age of record | Value |
-|---|---|
-| Current year | 1.00 |
-| 1 year old | 0.55 |
-| 2 years old | 0.30 |
-| 3 years old | 0.17 |
-""")
+    st.markdown("**Recency** (30%)")
+    st.caption("Exponential decay by age. Current year→1.00 · 1 yr→0.55 · 2 yrs→0.30 · 3 yrs→0.17")
 
-    st.markdown("**Source Strength** *(20% weight)*")
-    st.caption("Highest-weight signal type detected. For Predicted entries, 'Active RFP' keyword matches are excluded to avoid false inflation.")
-    st.markdown("""
-| Signal Type | Value |
-|---|---|
-| SPLOST / Active RFP | 1.00 |
-| Bond Issuance | 0.90 |
-| Capital Budget | 0.90 |
-| State Budget Session | 0.85 |
-| Legislation | 0.70 |
-| Planning Study | 0.60 |
-| Political Meetings | 0.50 |
-| News / Press | 0.30 |
-| No signal matched | 0.20 |
-""")
+    st.markdown("**Source Strength** (20%)")
+    st.caption("Highest-weight signal found. SPLOST/RFP→1.00 · Bond/Capital→0.90 · State Budget→0.85 · Legislation→0.70 · Planning Study→0.60 · Political→0.50 · News→0.30")
 
-    st.markdown("**Pipeline Stage** *(15% weight)*")
-    st.caption("How far the opportunity has progressed toward an active procurement.")
-    st.markdown("""
-| Bucket | Value |
-|---|---|
-| 1 - Active RFP | 1.00 |
-| 2 - Predicted | 0.50 |
-| Unknown | 0.30 |
-| Expired / Awarded / Cancelled | 0.00 |
-""")
+    st.markdown("**Pipeline Stage** (15%)")
+    st.caption("Active RFP→1.00 · Predicted→0.50 · Unknown→0.30 · Expired/Closed→0.00")
 
     st.divider()
     if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
