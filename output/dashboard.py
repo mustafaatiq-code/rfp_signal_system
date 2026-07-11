@@ -8,6 +8,8 @@ action to take.
 Run: streamlit run output/dashboard.py
 """
 import json
+import math
+import re
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -16,13 +18,13 @@ import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from storage.db import fetch_all  # noqa: E402
+from storage.db import fetch_all, refresh_expired_buckets  # noqa: E402
 
 # Ordered most-specific → most-general so the first match wins
 _WORK_TYPE_RULES = [
-    (["construction engineering", "cei", "construction inspection", "construction management at risk", "cmar", "construction manager at risk"], "CEI / Inspection"),
+    (["construction engineering", "cei", "construction inspection", "construction management at risk", "cmar", "construction manager at risk"], "Construction Engineering & Inspection"),
     (["design-build", "design build", "progressive design"], "Design-Build"),
-    (["a&e", "architecture", "engineering services", "design services", "professional services", "rfq", "prequalif"], "A&E / Engineering"),
+    (["a&e", "architecture", "engineering services", "design services", "professional services", "rfq", "prequalif"], "Architecture & Engineering"),
     (["lmig", "local maintenance", "local road assistance", "lra", "resurfacing", "milling", "overlay", "asphalt", "pavement"], "Road Resurfacing"),
     (["road widening", "widening", "lane addition", "road expansion"], "Road Widening"),
     (["road reconstruction", "street reconstruction", "reconstruction"], "Road Reconstruction"),
@@ -54,40 +56,130 @@ def _work_type(title: str, status_line: str = "") -> str:
     for keywords, label in _WORK_TYPE_RULES:
         if any(kw in text for kw in keywords):
             return label
-    return "Transportation (General)"
+    return "General Transportation"
 
-st.set_page_config(page_title="GMG Opportunity Signal Radar", layout="wide")
+st.set_page_config(page_title="GMG Opportunity Signal Radar", layout="wide",
+                   initial_sidebar_state="expanded")
+
+st.markdown("""
+<style>
+/* Remove Streamlit's default top padding */
+.block-container {
+    padding-top: 1.5rem !important;
+    padding-bottom: 1rem !important;
+}
+/* Hide the top toolbar visually without collapsing it (prevents title clipping) */
+header[data-testid="stHeader"] { visibility: hidden; }
+/* Compact bordered cards */
+section[data-testid="stVerticalBlockBorderWrapper"] > div:first-child {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+}
+/* Shrink gap between cards */
+section[data-testid="stVerticalBlockBorderWrapper"] {
+    margin-bottom: 4px !important;
+}
+/* Tighter heading spacing */
+h2, h3 { margin-top: 0.3rem !important; margin-bottom: 0.3rem !important; }
+/* Hide Streamlit's auto-added anchor link icon on headings */
+h2 a, h3 a { display: none !important; }
+/* Hide ALL sidebar collapse/expand controls */
+[data-testid="collapsedControl"] { display: none !important; }
+button[kind="header"] { display: none !important; }
+[data-testid="stSidebarCollapseButton"] { display: none !important; }
+section[data-testid="stSidebar"] > div:first-child > div:first-child > div:last-child { display: none !important; }
+</style>
+""", unsafe_allow_html=True)
 
 # ── Sidebar: action guide ─────────────────────────────────────────────────────
 with st.sidebar:
-    st.header("Action Guide")
+    st.markdown("**Action Guide**")
+
+    st.markdown("🔴 **1 - Active RFP**")
+    st.caption("Open solicitation with a future due date. Download documents, run bid/no-bid review, assemble team, and submit proposal.")
+
+    st.markdown("🟡 **2 - Predicted**")
+    st.caption("Early signal — project is live but no RFP yet. Add to watchlist, prepare qualifications, contact agency to signal interest.")
+
+    st.markdown("⚫ **Expired RFP / Awarded / Cancelled**")
+    st.caption("Opportunity closed. Note who won; follow up for re-solicitation or subcontracting opportunities.")
+
+    st.markdown("⚪ **Below relevance gate**")
+    st.caption("System scored as not relevant to GMG services. Skip unless you see a missed keyword — flag it to the team.")
+
+    st.divider()
+    st.markdown("**Score Legend**")
     st.markdown("""
-**1 - Active RFP** 🔴
-An open solicitation with a future due date.
-➜ *Download documents, run bid/no-bid review, assemble team, submit proposal.*
-
-**2 - Predicted** 🟡
-Early signal — project is live but no RFP yet.
-➜ *Add to watchlist, prepare qualifications, contact agency to signal interest.*
-
-**Expired / Closed** ⚫
-Due date passed or bid awarded.
-➜ *Note who won; follow up for re-solicitation or sub opportunities.*
-
-**Below relevance gate** ⚪
-System scored as not relevant to GMG services.
-➜ *Skip unless you see a missed keyword — flag it to the team.*
-
----
-**Score legend**
 | Score | Meaning |
 |---|---|
-| 1.0 | Confirmed active RFP |
-| 0.5–0.9 | Strong early signal |
-| 0.2–0.5 | Weak signal |
-| None | Failed relevance gate |
+| 1.00 | Confirmed open solicitation |
+| 0.7–0.99 | Strong early signal |
+| 0.5–0.69 | Moderate signal — monitor |
+| < 0.5 | Weak signal or failed gate |
+""")
 
----
+    st.divider()
+    st.markdown("**Scoring Formula**")
+    st.caption("Score = sum of four weighted components:")
+    st.markdown("""
+| Component | Weight | What it measures |
+|---|---|---|
+| Signal Count | 35% | No. of signal types detected (max 4) |
+| Recency | 30% | How recent the record is (decays with age) |
+| Source Strength | 20% | Quality of the funding/procurement signal |
+| Pipeline Stage | 15% | How far along toward an active RFP |
+""")
+
+    st.markdown("**Signal Count** *(35% weight)*")
+    st.caption("Number of distinct signal types found in the record, normalized to a 0–1 scale (max 4 signals = 1.00).")
+    st.markdown("""
+| Signals detected | Value |
+|---|---|
+| 4 or more | 1.00 |
+| 3 | 0.75 |
+| 2 | 0.50 |
+| 1 | 0.25 |
+| 0 | 0.00 |
+""")
+
+    st.markdown("**Recency** *(30% weight)*")
+    st.caption("Exponential decay applied to the record year — older records score lower (45% decay per year).")
+    st.markdown("""
+| Age of record | Value |
+|---|---|
+| Current year | 1.00 |
+| 1 year old | 0.55 |
+| 2 years old | 0.30 |
+| 3 years old | 0.17 |
+""")
+
+    st.markdown("**Source Strength** *(20% weight)*")
+    st.caption("Highest-weight signal type detected. For Predicted entries, 'Active RFP' keyword matches are excluded to avoid false inflation.")
+    st.markdown("""
+| Signal Type | Value |
+|---|---|
+| SPLOST / Active RFP | 1.00 |
+| Bond Issuance | 0.90 |
+| Capital Budget | 0.90 |
+| State Budget Session | 0.85 |
+| Legislation | 0.70 |
+| Planning Study | 0.60 |
+| Political Meetings | 0.50 |
+| News / Press | 0.30 |
+| No signal matched | 0.20 |
+""")
+
+    st.markdown("**Pipeline Stage** *(15% weight)*")
+    st.caption("How far the opportunity has progressed toward an active procurement.")
+    st.markdown("""
+| Bucket | Value |
+|---|---|
+| 1 - Active RFP | 1.00 |
+| 2 - Predicted | 0.50 |
+| Unknown | 0.30 |
+| Expired / Awarded / Cancelled | 0.00 |
 """)
 
     st.divider()
@@ -107,9 +199,10 @@ System scored as not relevant to GMG services.
         st.rerun()
 
 # ── Main ──────────────────────────────────────────────────────────────────────
-st.title("Opportunity Signal Radar")
+st.markdown("## Opportunity Signal Radar")
 st.caption("RFP Signal Detection & Opportunity Scoring System — GMG-3 Practicum")
 
+refresh_expired_buckets()
 rows = fetch_all()
 if not rows:
     st.warning("No data yet. Run `python run_pipeline.py` first.")
@@ -172,18 +265,22 @@ df["next_step"] = df.apply(next_step, axis=1)
 
 # ── Detail view (fires before metrics/filters so back button is at top) ────────
 if st.session_state.selected_id is not None:
-    if st.button("< Back to Opportunity List", type="primary", use_container_width=True):
-        st.session_state.selected_id = None
-        st.rerun()
+    back_col, _ = st.columns([2, 8])
+    with back_col:
+        if st.button("< Back to List", type="secondary", use_container_width=True):
+            st.session_state.selected_id = None
+            st.rerun()
 
     row = df[df["solicitation_id"].astype(str) == str(st.session_state.selected_id)]
     if not row.empty:
         r = row.iloc[0]
-
-        st.divider()
-        st.subheader(r["title"])
-
         ns = r.get("next_step", "")
+        score_val = r.get("rfp_likelihood")
+        bucket_val = str(r.get("bucket", ""))
+        url = r.get("source_url", "")
+
+        # ── Compact title + status bar ────────────────────────────────────────
+        st.markdown(f"### {r['title']}")
         if "URGENT" in ns:
             st.error(ns)
         elif "🟠" in ns:
@@ -191,79 +288,247 @@ if st.session_state.selected_id is not None:
         elif "🟡" in ns:
             st.info(ns)
         else:
-            st.write(ns)
+            st.caption(ns)
 
-        st.divider()
+        # ── Two-column fact grid ──────────────────────────────────────────────
+        gate = r.get("gate_reason", "")
+        gate_str = "PASS" if r.get("passed_gate") else f"FAIL — {gate}"
+        status_note = str(r.get("status_line") or "—")
+        score_str = f"{score_val:.2f}" if score_val is not None else "N/A"
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Agency", r.get("agency", "—"))
-        c2.metric("Work Type", r.get("work_type", "—"))
-        c3.metric("Due Date", str(r.get("due_date") or "Not specified"))
-        score = r.get("rfp_likelihood")
-        c4.metric("RFP Score", f"{score:.2f}" if score is not None else "N/A")
+        left_fields = [
+            ("Agency",          str(r.get("agency") or "—")),
+            ("Work Type",       str(r.get("work_type") or "—")),
+            ("Due Date",        str(r.get("due_date") or "Not specified")),
+            ("RFP Score",       score_str),
+            ("Bucket",          bucket_val or "—"),
+            ("Solicitation ID", str(r.get("solicitation_id") or "—")),
+        ]
+        right_fields = [
+            ("Service Types",  str(r.get("service_types") or "—")),
+            ("Signal Types",   str(r.get("signal_types") or "—")),
+            ("Relevance Gate", gate_str),
+            ("Year",           str(r.get("year") or "—")),
+            ("Status / Notes", status_note),
+            ("Source URL",     f'<a href="{url}" target="_blank">{url}</a>' if url else "—"),
+        ]
 
-        st.divider()
+        def _rows(pairs):
+            return "".join(
+                f"<tr>"
+                f"<td style='padding:5px 16px 5px 0;color:#888;font-size:0.85rem;"
+                f"white-space:nowrap;vertical-align:top'><b>{k}</b></td>"
+                f"<td style='padding:5px 0;font-size:0.92rem;vertical-align:top'>{v}</td>"
+                f"</tr>"
+                for k, v in pairs
+            )
 
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.markdown("**Bucket**")
-            st.write(r.get("bucket", "—"))
-            st.markdown("**Service Types**")
-            st.write(r.get("service_types") or "—")
-            st.markdown("**Signal Types**")
-            st.write(r.get("signal_types") or "—")
-        with col_b:
-            st.markdown("**Solicitation ID**")
-            st.write(r.get("solicitation_id", "—"))
-            st.markdown("**Relevance Gate**")
-            gate = r.get("gate_reason", "")
-            st.write("✅ PASS" if r.get("passed_gate") else f"❌ {gate}")
-            st.markdown("**Year**")
-            st.write(str(r.get("year", "—")))
+        col_l, col_r = st.columns(2)
+        with col_l:
+            st.markdown(
+                f"<table style='width:100%;border-collapse:collapse'>{_rows(left_fields)}</table>",
+                unsafe_allow_html=True)
+        with col_r:
+            st.markdown(
+                f"<table style='width:100%;border-collapse:collapse'>{_rows(right_fields)}</table>",
+                unsafe_allow_html=True)
 
-        st.divider()
-        st.markdown("**Status / Notes**")
-        st.write(r.get("status_line", "—"))
+        # ── Budget threshold check ─────────────────────────────────────────────
+        _MONEY_RE = re.compile(r"\$\s?([\d,]+(?:\.\d+)?)\s*(M|K|million|thousand)?", re.IGNORECASE)
+        _budget_text = f"{r.get('title', '')} {r.get('status_line', '')}"
+        _amounts: list[float] = []
+        for _m in _MONEY_RE.finditer(_budget_text):
+            _base = float(_m.group(1).replace(",", ""))
+            _unit = (_m.group(2) or "").lower()
+            if _unit in ("m", "million"):
+                _base *= 1_000_000
+            elif _unit in ("k", "thousand"):
+                _base *= 1_000
+            _amounts.append(_base)
+        if _amounts:
+            _below = [a for a in _amounts if a < 30_000]
+            _amt_str = ", ".join(f"${a:,.0f}" for a in _amounts)
+            if _below and all(a < 30_000 for a in _amounts):
+                st.warning(
+                    f"**Budget notice:** Detected project value(s) {_amt_str} appear below the "
+                    f"$30,000 minimum threshold. Confirm full project scope before pursuing — "
+                    f"the value shown may reflect a single task order or phase, not total contract value."
+                )
+            else:
+                st.caption(f"Detected budget mention(s): {_amt_str}")
 
-        url = r.get("source_url", "")
+        # ── Score breakdown with per-entry explanation ────────────────────────
+        if score_val is not None and score_val < 1.0:
+            st.markdown("<p style='margin-top:14px;margin-bottom:4px;font-size:1rem'>"
+                        "<b>Score Breakdown</b></p>", unsafe_allow_html=True)
+            _SOURCE_W = {
+                "SPLOST": 1.0, "Bond Issuance": 0.9, "Capital Budget": 0.9,
+                "State Budget Session": 0.85, "Legislation": 0.7,
+                "Planning Study": 0.6, "Political Meetings": 0.5,
+                "News / Press": 0.3, "Active RFP": 1.0,
+            }
+            _PIPE_W = {
+                "1 - Active RFP": 1.0, "2 - Predicted": 0.5,
+                "Awarded": 0.0, "Cancelled": 0.0,
+                "Expired RFP (past due)": 0.0, "Unknown": 0.3,
+            }
+            raw_signals = [s.strip() for s in str(r.get("signal_types") or "").split(",") if s.strip()]
+            n_sig = len(raw_signals)
+            signal_norm = round(min(n_sig, 4) / 4, 4)
+            age = max(date.today().year - int(r.get("year") or date.today().year), 0)
+            recency = round(math.exp(-0.6 * age), 4)
+            raw_sw = max((_SOURCE_W.get(s, 0.3) for s in raw_signals), default=0.2) if raw_signals else 0.2
+            if "Predicted" in bucket_val:
+                non_rfp = [s for s in raw_signals if s != "Active RFP"]
+                source_w = round(max((_SOURCE_W.get(s, 0.3) for s in non_rfp), default=0.6) if non_rfp else 0.6, 4)
+                sw_note = (
+                    f"'Active RFP' excluded for Predicted bucket; strongest remaining signal: "
+                    f"'{max(non_rfp, key=lambda s: _SOURCE_W.get(s,0.3))}' → weight {source_w:.2f}"
+                    if non_rfp else
+                    "Only 'Active RFP' detected — capped to 0.60 (Planning Study floor) for Predicted bucket"
+                )
+            else:
+                source_w = round(raw_sw, 4)
+                strongest = max(raw_signals, key=lambda s: _SOURCE_W.get(s, 0.3)) if raw_signals else "—"
+                sw_note = f"Strongest signal: '{strongest}' → weight {source_w:.2f}"
+            pipe_w = round(_PIPE_W.get(bucket_val, 0.3), 4)
+
+            explanations = [
+                f"{n_sig} signal type(s) detected out of 4 maximum: {', '.join(raw_signals) or '—'}",
+                f"Record from {r.get('year', '?')} — {age} year(s) old (score decays 45% per year)",
+                sw_note,
+                f"Bucket '{bucket_val}' → pipeline stage weight {pipe_w:.2f}",
+            ]
+            components = [
+                ("Signal Count",    signal_norm, 0.35),
+                ("Recency",         recency,     0.30),
+                ("Source Strength", source_w,    0.20),
+                ("Pipeline Stage",  pipe_w,      0.15),
+            ]
+            total = sum(v * w for _, v, w in components)
+            bar_rows = ""
+            for (label, val, wt), why in zip(components, explanations):
+                pct = int(val * 100)
+                contrib = val * wt
+                bar_rows += (
+                    f"<tr>"
+                    f"<td style='padding:5px 12px 5px 0;font-size:0.88rem;white-space:nowrap;vertical-align:top'>"
+                    f"<b>{label}</b></td>"
+                    f"<td style='padding:5px 8px;font-size:0.88rem;text-align:right;vertical-align:top'>{val:.2f}</td>"
+                    f"<td style='padding:5px 8px;font-size:0.88rem;color:#666;vertical-align:top'>×{wt}</td>"
+                    f"<td style='width:140px;padding:5px 8px;vertical-align:middle'>"
+                    f"  <div style='background:#e0e0e0;border-radius:4px;height:10px'>"
+                    f"    <div style='background:#4CAF50;width:{pct}%;height:10px;border-radius:4px'></div>"
+                    f"  </div></td>"
+                    f"<td style='padding:5px 8px;font-size:0.88rem;text-align:right;vertical-align:top'>"
+                    f"<b>{contrib:.4f}</b></td>"
+                    f"<td style='padding:5px 0 5px 12px;font-size:0.8rem;color:#666;vertical-align:top'>{why}</td>"
+                    f"</tr>"
+                )
+            st.markdown(
+                f"<table style='width:100%;border-collapse:collapse'>"
+                f"<tr style='border-bottom:1px solid #ddd'>"
+                f"<th style='font-size:0.8rem;color:#888;padding:3px 12px 3px 0;text-align:left'>Factor</th>"
+                f"<th style='font-size:0.8rem;color:#888;padding:3px 8px;text-align:right'>Value</th>"
+                f"<th style='font-size:0.8rem;color:#888;padding:3px 8px'>Weight</th>"
+                f"<th style='font-size:0.8rem;color:#888;padding:3px 8px'>Bar</th>"
+                f"<th style='font-size:0.8rem;color:#888;padding:3px 8px;text-align:right'>Contribution</th>"
+                f"<th style='font-size:0.8rem;color:#888;padding:3px 0 3px 12px'>Why this value?</th></tr>"
+                f"{bar_rows}"
+                f"<tr style='border-top:1px solid #ddd'>"
+                f"<td colspan='4' style='padding-top:6px;font-size:0.95rem'><b>Final Score</b></td>"
+                f"<td style='padding-top:6px;font-size:0.95rem;text-align:right'><b>{total:.2f}</b></td>"
+                f"<td></td></tr>"
+                f"</table>",
+                unsafe_allow_html=True,
+            )
+        elif score_val == 1.0:
+            st.caption("Active RFP — score fixed at 1.00 (confirmed open solicitation).")
+
         if url:
-            st.link_button("🔗 Open Source / Bid Portal", url, type="primary")
+            st.markdown("<div style='margin-top:10px'></div>", unsafe_allow_html=True)
+            st.link_button("Open Source / Bid Portal", url, type="primary")
 
-        st.stop()
+    st.stop()
 
 # ── Metrics ───────────────────────────────────────────────────────────────────
-c1, c2, c3, c4 = st.columns(4)
+_EXPIRED_BUCKETS = {"Expired RFP (past due)", "Awarded", "Cancelled"}
+c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Total signals", len(df))
-c2.metric("Passed gate", int(df["passed_gate"].sum()))
-c3.metric("Flagged for review", int(df["flagged_for_review"].sum()))
+c2.metric("🔴 Active RFPs", int((df["bucket"] == "1 - Active RFP").sum()))
+c3.metric("🟡 Predicted", int((df["bucket"] == "2 - Predicted").sum()))
+c4.metric("⚫ Expired / Closed", int(df["bucket"].isin(_EXPIRED_BUCKETS).sum()))
 urgent = df["next_step"].str.contains("URGENT", na=False).sum()
-c4.metric("Urgent (≤7 days)", int(urgent), delta_color="inverse")
+c5.metric("🚨 Urgent (≤7 days)", int(urgent), delta_color="inverse")
 
-st.divider()
+# ── Filters (always visible) ──────────────────────────────────────────────────
+if "filter_reset" not in st.session_state:
+    st.session_state.filter_reset = 0
+_fk = st.session_state.filter_reset
 
-# ── Filters ───────────────────────────────────────────────────────────────────
-with st.expander("Filters", expanded=True):
-    row1a, row1b, row1c = st.columns(3)
-    with row1a:
-        keyword = st.text_input("Search title", placeholder="e.g. resurfacing, bridge, CEI")
-    with row1b:
-        bucket_opts = ["All"] + sorted(df["bucket"].dropna().unique().tolist())
-        bucket_filter = st.selectbox("Bucket", bucket_opts)
-    with row1c:
-        agency_opts = ["All"] + sorted(df["agency"].dropna().unique().tolist())
-        agency_filter = st.selectbox("Agency", agency_opts)
+# Persistent filter defaults that survive detail-view navigation (widget keys
+# are cleared when widgets aren't rendered, but these _pf_* keys are not).
+_pf_defaults = {"_pf_keyword": "", "_pf_bucket": "All", "_pf_agency": "All",
+                "_pf_worktype": "All", "_pf_due": "Any", "_pf_score": 0.0,
+                "_pf_hide_exp": True, "_pf_flagged": False}
+for k, v in _pf_defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-    row2a, row2b, row2c, row2d = st.columns(4)
-    with row2a:
-        wt_opts = ["All"] + sorted(df["work_type"].dropna().unique().tolist())
-        work_type_filter = st.selectbox("Work Type", wt_opts)
-    with row2b:
-        min_score = st.slider("Min RFP Score", 0.0, 1.0, 0.0, 0.05)
-    with row2c:
-        due_window_opts = ["Any", "Overdue / No date", "Due in 7 days", "Due in 30 days", "Due in 90 days"]
-        due_window = st.selectbox("Due Date Window", due_window_opts)
-    with row2d:
-        show_flagged = st.checkbox("Flagged for review only", value=False)
+def _sel_idx(opts, saved):
+    try:
+        return opts.index(saved)
+    except ValueError:
+        return 0
+
+f1, f2, f3, f4, f5, f6 = st.columns([2.5, 1.5, 1.5, 1.5, 1.5, 1.5])
+with f1:
+    keyword = st.text_input("Search title", value=st.session_state["_pf_keyword"],
+                             placeholder="keyword…", key=f"kw_{_fk}")
+    st.session_state["_pf_keyword"] = keyword
+with f2:
+    bucket_opts = ["All"] + sorted(df["bucket"].dropna().unique().tolist())
+    bucket_filter = st.selectbox("Bucket", bucket_opts,
+                                  index=_sel_idx(bucket_opts, st.session_state["_pf_bucket"]),
+                                  key=f"bkt_{_fk}")
+    st.session_state["_pf_bucket"] = bucket_filter
+with f3:
+    agency_opts = ["All"] + sorted(df["agency"].dropna().unique().tolist())
+    agency_filter = st.selectbox("Agency", agency_opts,
+                                  index=_sel_idx(agency_opts, st.session_state["_pf_agency"]),
+                                  key=f"agc_{_fk}")
+    st.session_state["_pf_agency"] = agency_filter
+with f4:
+    wt_opts = ["All"] + sorted(df["work_type"].dropna().unique().tolist())
+    work_type_filter = st.selectbox("Work Type", wt_opts,
+                                     index=_sel_idx(wt_opts, st.session_state["_pf_worktype"]),
+                                     key=f"wt_{_fk}")
+    st.session_state["_pf_worktype"] = work_type_filter
+with f5:
+    due_window_opts = ["Any", "Due in 7 days", "Due in 30 days", "Due in 90 days", "Overdue / No date"]
+    due_window = st.selectbox("Due Date", due_window_opts,
+                               index=_sel_idx(due_window_opts, st.session_state["_pf_due"]),
+                               key=f"dw_{_fk}")
+    st.session_state["_pf_due"] = due_window
+with f6:
+    min_score = st.slider("Min Score", 0.0, 1.0, st.session_state["_pf_score"], 0.05, key=f"ms_{_fk}")
+    st.session_state["_pf_score"] = min_score
+
+cb1, cb2, _, clr = st.columns([1.5, 1.5, 5, 1.5])
+with cb1:
+    hide_expired = st.checkbox("Hide expired & closed", value=st.session_state["_pf_hide_exp"], key=f"he_{_fk}")
+    st.session_state["_pf_hide_exp"] = hide_expired
+with cb2:
+    show_flagged = st.checkbox("High priority only (score ≥ 0.50)", value=st.session_state["_pf_flagged"], key=f"fl_{_fk}")
+    st.session_state["_pf_flagged"] = show_flagged
+with clr:
+    st.markdown("<div style='margin-top:4px'>", unsafe_allow_html=True)
+    if st.button("Clear filters", use_container_width=True):
+        for k, v in _pf_defaults.items():
+            st.session_state[k] = v
+        st.session_state.filter_reset += 1
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 view = df.copy()
 if keyword.strip():
@@ -279,6 +544,8 @@ if min_score > 0.0:
     view = view[view["rfp_likelihood"].fillna(0) >= min_score]
 if show_flagged:
     view = view[view["flagged_for_review"] == 1]
+if hide_expired and bucket_filter not in _EXPIRED_BUCKETS:
+    view = view[~view["bucket"].isin(_EXPIRED_BUCKETS)]
 if due_window != "Any":
     def _due_date_obj(val):
         try:
@@ -299,7 +566,13 @@ if due_window != "Any":
 # ── List view ─────────────────────────────────────────────────────────────────
 sorted_view = view.sort_values("rfp_likelihood", ascending=False, na_position="last")
 
-st.subheader(f"Ranked Opportunity List  —  {len(sorted_view)} records")
+hdr_left, hdr_right = st.columns([6, 1])
+hdr_left.subheader(f"Ranked Opportunity List  —  {len(sorted_view)} records")
+with hdr_right:
+    export_cols = ["title", "agency", "work_type", "bucket", "due_date", "rfp_likelihood", "next_step", "source_url"]
+    export_cols = [c for c in export_cols if c in sorted_view.columns]
+    csv_bytes = sorted_view[export_cols].to_csv(index=False).encode("utf-8")
+    st.download_button("Download CSV", csv_bytes, "opportunities.csv", "text/csv", use_container_width=True)
 
 for _, r in sorted_view.iterrows():
     ns = str(r.get("next_step", ""))
@@ -314,7 +587,12 @@ for _, r in sorted_view.iterrows():
         left, right = st.columns([8, 1])
         with left:
             st.markdown(f"**{title}**")
-            st.caption(f"{ns}  &nbsp;|&nbsp;  {agency}  &nbsp;|&nbsp;  {work_type}  &nbsp;|&nbsp;  Due: {due}  &nbsp;|&nbsp;  Score: {score_str}")
+            st.markdown(
+                f"<span style='font-size:0.82rem;color:#555'>{ns} &nbsp;|&nbsp; {agency} &nbsp;|&nbsp; {work_type}"
+                f" &nbsp;|&nbsp; Due: <b style='color:#222;font-size:0.9rem'>{due}</b>"
+                f" &nbsp;|&nbsp; Score: <b style='color:#222;font-size:0.9rem'>{score_str}</b></span>",
+                unsafe_allow_html=True,
+            )
         with right:
             if st.button("View", key=f"row_{r['solicitation_id']}", use_container_width=True):
                 st.session_state.selected_id = r["solicitation_id"]

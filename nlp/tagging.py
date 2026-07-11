@@ -20,7 +20,7 @@ from typing import List, Optional
 
 # Service lines called out in the midterm deck (from Gude's own proposals)
 SERVICE_TYPE_KEYWORDS = {
-    "CEI": [
+    "Construction Engineering & Inspection": [
         "cei", "construction engineering and inspection",
         "construction engineering inspection",   # without "and" (SAM.gov style)
         "construction inspection", "resident engineer",
@@ -35,12 +35,12 @@ SERVICE_TYPE_KEYWORDS = {
         "corridor study", "environmental impact", "environmental assessment",
         "transportation study", "mobility study",
     ],
-    "Program Mgmt": [
+    "Program Management": [
         "program management", "program mgmt", "cip program",
         "construction program", "program support", "program manager",
         "project management support",
     ],
-    "Traffic Ops": [
+    "Traffic Operations": [
         "traffic ops", "traffic operations", "traffic study",
         "signal", "itse", "intersection", "traffic control",
         "intelligent transportation", "its ", "congestion management",
@@ -48,7 +48,7 @@ SERVICE_TYPE_KEYWORDS = {
         "pedestrian signal", "crosswalk", "roundabout", "access management",
         "safety improvement", "corridor safety",
     ],
-    "A&E": [
+    "Architecture & Engineering": [
         "architectural", "engineering services", "a&e", "design services",
         "renovation", "replacement", "highway design", "roadway design",
         "transportation engineering", "bridge design", "drainage design",

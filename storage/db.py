@@ -91,6 +91,37 @@ def upsert_opportunities(opps: List[ScoredOpportunity],
     return count
 
 
+def refresh_expired_buckets(db_path: Path = DB_PATH) -> int:
+    """Reclassify Active RFPs whose due date has passed to 'Expired RFP (past due)'.
+
+    Called on every dashboard load so the DB stays accurate as time passes
+    without needing a full pipeline re-run.  Returns the number of rows updated.
+    """
+    from datetime import date
+    today = date.today()
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE opportunities
+                SET bucket = 'Expired RFP (past due)',
+                    is_expired = 1,
+                    rfp_likelihood = 0.0,
+                    flagged_for_review = 0
+                WHERE (
+                    (bucket = '1 - Active RFP' AND due_date IS NOT NULL AND due_date < ?)
+                    OR bucket IN ('Awarded', 'Cancelled')
+                )
+                """,
+                (today.isoformat(),),
+            )
+            return cur.rowcount
+    finally:
+        conn.close()
+
+
 def purge_expired(db_path: Path = DB_PATH) -> int:
     """Delete stale Active RFP rows. Returns count removed.
 

@@ -151,7 +151,17 @@ def _recency_score(record: dict, today: Optional[date] = None) -> float:
 def _source_weight(tagged: TaggedRecord) -> float:
     if not tagged.signal_types:
         return 0.2
-    return max(SOURCE_WEIGHTS.get(s, 0.3) for s in tagged.signal_types)
+    raw = max(SOURCE_WEIGHTS.get(s, 0.3) for s in tagged.signal_types)
+    # For Predicted entries, "Active RFP" is a keyword false-positive — if a
+    # solicitation were truly open it would be in bucket 1.  Exclude it from the
+    # weight calculation; use the best remaining signal instead.
+    bucket = tagged.record.get("bucket", "")
+    if "Predicted" in bucket:
+        non_rfp = [s for s in tagged.signal_types if s != "Active RFP"]
+        if non_rfp:
+            return max(SOURCE_WEIGHTS.get(s, 0.3) for s in non_rfp)
+        return SOURCE_WEIGHTS["Planning Study"]   # 0.6 floor when only signal was "Active RFP"
+    return raw
 
 
 def _pipeline_stage_score(bucket: str) -> float:
