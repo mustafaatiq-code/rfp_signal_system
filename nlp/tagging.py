@@ -132,11 +132,13 @@ SERVICE_TYPE_KEYWORDS = {
         "safe routes",                    # Safe Routes to School / Transit program
         "safe streets",                   # Safe Streets for All (federal program)
         "safe roads", "road safety",      # road safety programs
-        # Street / roadway lighting (transportation infrastructure)
+        # Street / roadway / decorative lighting (transportation infrastructure)
         "street lighting", "roadway lighting", "highway lighting",
         "pedestrian lighting", "streetlight", "street light",
+        "string lighting", "string lights", "festoon lighting",
         # Signing and marking (traffic operations scope)
-        "traffic signing", "road signs", "sign replacement", "sign installation",
+        "traffic signing", "road signs", "street signs", "street sign",
+        "sign replacement", "sign installation", "sign update", "sign upgrade",
         "delineator", "guardrail",
         # Signal timing and performance
         "signal timing", "signal coordination", "signal optimization",
