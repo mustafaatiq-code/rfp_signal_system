@@ -172,9 +172,9 @@ def rescore_existing(db_path: Path = DB_PATH) -> int:
     conn.row_factory = None
 
     today = date.today()
-    # Only rescore gate-failed rows; gate-passed rows used status_line during
-    # original ingestion (not stored in DB) and should keep their scores.
-    rows = [r for r in rows if not r.get("passed_gate")]
+    # Rescore all rows so that new exclusion patterns also drop false positives
+    # from previously gate-passed records. Gate-passed rows re-run the full gate;
+    # they keep their existing score if they still pass.
 
     with conn:
         cur = conn.cursor()

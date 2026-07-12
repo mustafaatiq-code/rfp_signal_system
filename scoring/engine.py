@@ -166,6 +166,15 @@ _EXCLUSION_PHRASES: list[str] = [
     "va palo alto", "nawcad",
     # Mobile office / temporary building facilities
     "mobile office trailer",
+    # Temporary portables / modular classrooms (school site work, not transportation)
+    "temporary portables", "modular classroom", "portable classroom",
+    # Personnel / organizational announcements — no procurement signal
+    "managing director",       # "ARC Names X Senior Managing Director of ..."
+    " appoints ",              # "[Org] appoints [person]"
+    " appointed as ",          # "[person] appointed as [role]"
+    "elected chairman", "elected president", "board elects",
+    "welcomes new director", "welcomes new chief",
+    "retirement of ", "farewell to ",
 ]
 
 
