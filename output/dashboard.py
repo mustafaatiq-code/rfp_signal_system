@@ -456,7 +456,7 @@ _fk = st.session_state.filter_reset
 # are cleared when widgets aren't rendered, but these _pf_* keys are not).
 _pf_defaults = {"_pf_keyword": "", "_pf_bucket": "All", "_pf_agency": "All",
                 "_pf_worktype": "All", "_pf_due": "Any", "_pf_score": 0.0,
-                "_pf_hide_exp": True, "_pf_flagged": False}
+                "_pf_hide_exp": True, "_pf_flagged": False, "_pf_show_all": False}
 for k, v in _pf_defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
@@ -500,13 +500,16 @@ with f6:
     min_score = st.slider("Min Score", 0.0, 1.0, st.session_state["_pf_score"], 0.05, key=f"ms_{_fk}")
     st.session_state["_pf_score"] = min_score
 
-cb1, cb2, _, clr = st.columns([1.5, 1.5, 5, 1.5])
+cb1, cb2, cb3, _, clr = st.columns([1.5, 1.8, 1.8, 2, 1.5])
 with cb1:
     hide_expired = st.checkbox("Hide expired & closed", value=st.session_state["_pf_hide_exp"], key=f"he_{_fk}")
     st.session_state["_pf_hide_exp"] = hide_expired
 with cb2:
     show_flagged = st.checkbox("High priority only (score ≥ 0.50)", value=st.session_state["_pf_flagged"], key=f"fl_{_fk}")
     st.session_state["_pf_flagged"] = show_flagged
+with cb3:
+    show_all = st.checkbox("Show all signals (incl. below-gate)", value=st.session_state["_pf_show_all"], key=f"sa_{_fk}")
+    st.session_state["_pf_show_all"] = show_all
 with clr:
     st.markdown("<div style='margin-top:4px'>", unsafe_allow_html=True)
     if st.button("Clear filters", use_container_width=True):
@@ -553,16 +556,21 @@ if due_window != "Any":
 # ── List view ─────────────────────────────────────────────────────────────────
 sorted_view = view.sort_values("rfp_likelihood", ascending=False, na_position="last")
 
-# Split into gate-passed (main list) and gate-failed (separate section)
 above_gate = sorted_view[sorted_view["passed_gate"] == 1]
 below_gate = sorted_view[sorted_view["passed_gate"] == 0]
 
+# When "show all" is on, merge below-gate rows at the end of the main list
+main_list = sorted_view if show_all else above_gate
+list_label = f"Ranked Opportunity List  —  {len(main_list)} records"
+if show_all and len(below_gate) > 0:
+    list_label += f"  ({len(below_gate)} below gate, shown muted)"
+
 hdr_left, hdr_right = st.columns([6, 1])
-hdr_left.subheader(f"Ranked Opportunity List  —  {len(above_gate)} records")
+hdr_left.subheader(list_label)
 with hdr_right:
     export_cols = ["title", "agency", "work_type", "bucket", "due_date", "rfp_likelihood", "next_step", "source_url"]
     export_cols = [c for c in export_cols if c in sorted_view.columns]
-    csv_bytes = above_gate[export_cols].to_csv(index=False).encode("utf-8")
+    csv_bytes = main_list[export_cols].to_csv(index=False).encode("utf-8")
     st.download_button("Download CSV", csv_bytes, "opportunities.csv", "text/csv", use_container_width=True)
 
 def _render_row(r, muted: bool = False):
@@ -588,25 +596,29 @@ def _render_row(r, muted: bool = False):
                 unsafe_allow_html=True,
             )
         with right:
-            if not muted:
-                if st.button("View", key=f"row_{r['solicitation_id']}", use_container_width=True):
-                    st.session_state.selected_id = r["solicitation_id"]
-                    st.rerun()
-            else:
-                if st.button("View", key=f"row_{r['solicitation_id']}", use_container_width=True,
-                             type="secondary", disabled=False):
-                    st.session_state.selected_id = r["solicitation_id"]
-                    st.rerun()
+            if st.button("View", key=f"row_{r['solicitation_id']}", use_container_width=True):
+                st.session_state.selected_id = r["solicitation_id"]
+                st.rerun()
 
-for _, r in above_gate.iterrows():
-    _render_row(r, muted=False)
-
-if len(below_gate) > 0:
-    st.divider()
-    with st.expander(f"⚪ Below Relevance Gate — {len(below_gate)} records (no matched GMG service type)"):
-        st.caption(
-            "These records did not match any GMG service type keyword or Georgia geography. "
-            "Review if you think a keyword was missed. Flag to the team to add it."
-        )
+if show_all:
+    # Merged view: gate-passed first (scored), then below-gate (muted)
+    for _, r in above_gate.iterrows():
+        _render_row(r, muted=False)
+    if len(below_gate) > 0:
+        st.divider()
+        st.caption(f"⚪ Below relevance gate — {len(below_gate)} records (muted)")
         for _, r in below_gate.iterrows():
             _render_row(r, muted=True)
+else:
+    # Default: gate-passed in main list; below-gate in collapsed expander
+    for _, r in above_gate.iterrows():
+        _render_row(r, muted=False)
+    if len(below_gate) > 0:
+        st.divider()
+        with st.expander(f"⚪ Below Relevance Gate — {len(below_gate)} records"):
+            st.caption(
+                "These records did not match any GMG service type keyword or Georgia geography. "
+                "Review if you think a keyword was missed. Enable 'Show all signals' above to see them in the main list."
+            )
+            for _, r in below_gate.iterrows():
+                _render_row(r, muted=True)
