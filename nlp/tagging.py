@@ -86,6 +86,108 @@ SERVICE_TYPE_KEYWORDS = {
     ],
 }
 
+# NIGP (National Institute of Governmental Purchasing) commodity/service codes
+# relevant to GMG's transportation service lines.  GPR detail pages and some
+# county portals embed these codes in solicitation text — matching the 5-digit
+# code OR description phrases lets the gate fire on either form.
+#
+# Codes are grouped by GMG service line; descriptions are lower-cased and
+# stripped of NIGP boilerplate ("(not otherwise classified)", etc.) to act as
+# additional keyword phrases.
+NIGP_CODES: dict[str, list[tuple[str, str]]] = {
+    "Construction Engineering & Inspection": [
+        # Sidewalk / pedestrian
+        ("91347", "construction sidewalk driveway pedestrian handicap ramps"),
+        ("91357", "construction vaulted sidewalk"),
+        ("91382", "maintenance repair sidewalk driveway removal"),
+        # Bridges & culverts
+        ("91430", "construction bridge culvert"),
+        ("91577", "construction highway bridge bridge repair"),
+        ("91610", "construction bridges"),
+        # Highway / road construction
+        ("91510", "construction highway"),
+        ("91512", "construction highway concrete curbs median gutter"),
+        ("91514", "construction highway drainage erosion control"),
+        ("91515", "construction highway clearing grubbing"),
+        ("91530", "construction highway asphalt bituminous paving"),
+        ("91540", "construction highway asphalt bituminous resurfacing"),
+        ("91545", "construction highway concrete paving"),
+        ("91555", "construction highway earth moving embankments fills"),
+        ("91560", "construction highway earth retention retaining walls"),
+        ("91565", "construction highway grading"),
+        ("91575", "construction highway guardrails fencing barriers"),
+        ("91585", "construction highway sealing"),
+        ("91590", "construction highway resurfacing"),
+        ("91600", "construction highway signs pavement markings"),
+        # Road construction general
+        ("91700", "construction roads"),
+        ("91730", "construction roadway road"),
+        ("91750", "construction roadway milling overlaying"),
+        ("91760", "construction roadway safety features"),
+        ("91800", "construction pedestrian bicycle facilities"),
+    ],
+    "Traffic Operations": [
+        ("55085", "traffic signal poles standards brackets"),
+        ("96880", "traffic control safety equipment maintenance repair"),
+        ("96883", "traffic signal maintenance repair"),
+        ("96887", "traffic control equipment maintenance repair"),
+        ("96889", "traffic marking signing services"),
+        ("96890", "traffic engineering services"),
+    ],
+    "Architecture & Engineering": [
+        ("92514", "engineering services transportation traffic"),
+        ("92516", "engineering services highway road"),
+        ("92517", "engineering services bridge"),
+        ("92520", "engineering services civil"),
+        ("92522", "engineering services construction management inspection"),
+        ("92524", "engineering services environmental"),
+        ("92526", "engineering services geotechnical soils"),
+        ("92528", "engineering services surveying"),
+        ("96400", "right-of-way acquisition services"),
+        ("96420", "right-of-way survey services"),
+    ],
+    "Program Management": [
+        ("94010", "consulting services construction management"),
+        ("94014", "consulting services engineering"),
+        ("94018", "consulting services transportation planning"),
+    ],
+    "Planning": [
+        ("94020", "consulting services urban regional planning"),
+    ],
+}
+
+# Flat lookup: nigp_code → service_type (for fast code matching)
+_NIGP_CODE_TO_SERVICE: dict[str, str] = {
+    code: svc
+    for svc, entries in NIGP_CODES.items()
+    for code, _ in entries
+}
+
+# Flat lookup: description phrase → service_type
+_NIGP_DESC_PHRASES: list[tuple[str, str]] = [
+    (desc, svc)
+    for svc, entries in NIGP_CODES.items()
+    for _, desc in entries
+]
+
+# 5-digit NIGP code pattern
+_NIGP_RE = re.compile(r"\b(\d{5})\b")
+
+
+def _nigp_service_types(text: str) -> list[str]:
+    """Return service types matched by NIGP codes or their description phrases."""
+    text_l = text.lower()
+    matched: set[str] = set()
+    for m in _NIGP_RE.finditer(text):
+        svc = _NIGP_CODE_TO_SERVICE.get(m.group(1))
+        if svc:
+            matched.add(svc)
+    for phrase, svc in _NIGP_DESC_PHRASES:
+        if phrase in text_l:
+            matched.add(svc)
+    return list(matched)
+
+
 SIGNAL_TYPE_KEYWORDS = {
     "SPLOST": [
         "splost", "tsplost", "esplost",
@@ -138,6 +240,14 @@ SIGNAL_TYPE_KEYWORDS = {
     ],
 }
 
+# Road suffix words used in "[Road Name] at/@ [Road Name]" intersection project titles.
+# Matches patterns like "Rose Avenue at Roselake Circle", "SR 166 @ Chapel Hill Road".
+_ROAD_SUFFIXES = r"(?:road|rd|street|st|avenue|ave|boulevard|blvd|drive|dr|lane|ln|parkway|pkwy|way|circle|court|ct|place|pl|terrace|tr|highway|hwy|pike)"
+_ROAD_INTERSECTION_RE = re.compile(
+    rf"\b{_ROAD_SUFFIXES}\b.{{0,40}}(?:\bat\b|@).{{0,40}}\b{_ROAD_SUFFIXES}\b",
+    re.IGNORECASE,
+)
+
 MONEY_RE = re.compile(r"\$\s?[\d,.]+\s?(?:[MK]|million|thousand)?", re.IGNORECASE)
 DATE_RE = re.compile(
     r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
@@ -184,9 +294,19 @@ def tag_record(record: dict) -> TaggedRecord:
     service types and signal types based on its title + status fields."""
     blob = " ".join(str(record.get(f, "")) for f in
                      ("title", "status_line", "agency", "bucket"))
+    service_types = _match_keywords(blob, SERVICE_TYPE_KEYWORDS)
+    # NIGP code / description matching (codes in status_line or GPR text)
+    for svc in _nigp_service_types(blob):
+        if svc not in service_types:
+            service_types.append(svc)
+    # "[Road] at/@ [Road]" pattern — intersection/road project with name-only title
+    title = str(record.get("title", ""))
+    if "Construction Engineering & Inspection" not in service_types and \
+            _ROAD_INTERSECTION_RE.search(title):
+        service_types = ["Construction Engineering & Inspection"] + service_types
     return TaggedRecord(
         record=record,
-        service_types=_match_keywords(blob, SERVICE_TYPE_KEYWORDS),
+        service_types=service_types,
         signal_types=_match_keywords(blob, SIGNAL_TYPE_KEYWORDS),
         money_mentions=MONEY_RE.findall(blob),
         date_mentions=DATE_RE.findall(blob),

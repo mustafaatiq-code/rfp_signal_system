@@ -140,6 +140,8 @@ def relevance_gate(tagged: TaggedRecord, est_budget: Optional[float],
     """
     if not tagged.service_types:
         return False, "No matching service type (Construction Engineering & Inspection / Planning / Program Management / Traffic Operations / Architecture & Engineering)"
+    if tagged.signal_types == ["News / Press"]:
+        return False, "News/press article only — no procurement, funding, or planning signal detected"
     if not any(kw in geography_text.lower() for kw in GEOGRAPHY_KEYWORDS):
         return False, "Outside Phase 1 Georgia geography"
     if est_budget is not None and est_budget < MIN_BUDGET:
