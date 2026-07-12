@@ -426,19 +426,26 @@ if st.session_state.selected_id is not None:
 
 # ── Metrics ───────────────────────────────────────────────────────────────────
 _EXPIRED_BUCKETS = {"Expired RFP (past due)", "Awarded", "Cancelled"}
-_df_passed = df[df["passed_gate"] == 1]   # metrics show only relevance-passed records
-c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("Total signals", len(df))
-c2.metric("🔴 Active RFPs", int((_df_passed["bucket"] == "1 - Active RFP").sum()))
-c3.metric("🟡 Predicted", int((_df_passed["bucket"] == "2 - Predicted").sum()))
-c4.metric("⚫ Expired / Closed", int(_df_passed["bucket"].isin(_EXPIRED_BUCKETS).sum()))
-urgent = _df_passed["next_step"].str.contains("URGENT", na=False).sum()
-c5.metric("🚨 Urgent (≤7 days)", int(urgent), delta_color="inverse")
-_n_below = int((df["passed_gate"] == 0).sum())
-st.caption(
-    f"⚪ **{_n_below} records below relevance gate** — no matched GMG service type or Georgia geography. "
-    f"Shown separately at the bottom of the list."
-)
+_df_passed = df[df["passed_gate"] == 1]
+_n_below   = int((df["passed_gate"] == 0).sum())
+_n_active  = int((_df_passed["bucket"] == "1 - Active RFP").sum())
+_n_pred    = int((_df_passed["bucket"] == "2 - Predicted").sum())
+_n_exp     = int(_df_passed["bucket"].isin(_EXPIRED_BUCKETS).sum())
+_n_urgent  = int(_df_passed["next_step"].str.contains("URGENT", na=False).sum())
+
+# Row 1 — overview
+m1, m2, m3 = st.columns(3)
+m1.metric("Total Signals", len(df))
+m2.metric("✅ Passed Relevance Gate", len(_df_passed))
+m3.metric("⚪ Below Relevance Gate", _n_below)
+
+# Row 2 — breakdown of gate-passed records
+st.caption("Breakdown of gate-passed records:")
+b1, b2, b3, b4 = st.columns(4)
+b1.metric("🔴 Active RFPs", _n_active)
+b2.metric("🟡 Predicted", _n_pred)
+b3.metric("⚫ Expired / Closed", _n_exp)
+b4.metric("🚨 Urgent (≤7 days)", _n_urgent, delta_color="inverse")
 
 # ── Filters (always visible) ──────────────────────────────────────────────────
 if "filter_reset" not in st.session_state:
