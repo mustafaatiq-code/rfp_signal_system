@@ -426,26 +426,30 @@ if st.session_state.selected_id is not None:
 
 # ── Metrics ───────────────────────────────────────────────────────────────────
 _EXPIRED_BUCKETS = {"Expired RFP (past due)", "Awarded", "Cancelled"}
-_df_passed = df[df["passed_gate"] == 1]
-_n_below   = int((df["passed_gate"] == 0).sum())
-_n_active  = int((_df_passed["bucket"] == "1 - Active RFP").sum())
-_n_pred    = int((_df_passed["bucket"] == "2 - Predicted").sum())
-_n_exp     = int(_df_passed["bucket"].isin(_EXPIRED_BUCKETS).sum())
-_n_urgent  = int(_df_passed["next_step"].str.contains("URGENT", na=False).sum())
+_df_passed  = df[df["passed_gate"] == 1]
+_n_below    = int((df["passed_gate"] == 0).sum())
+_n_active   = int((_df_passed["bucket"] == "1 - Active RFP").sum())
+_n_pred     = int((_df_passed["bucket"] == "2 - Predicted").sum())
+_n_all_exp  = int(df["bucket"].isin(_EXPIRED_BUCKETS).sum())   # across ALL records
+_n_remaining = len(df) - _n_all_exp
+_n_urgent   = int(_df_passed["next_step"].str.contains("URGENT", na=False).sum())
 
-# Row 1 — overview
+# Row 1 — funnel: Total → Expired → Remaining
 m1, m2, m3 = st.columns(3)
 m1.metric("Total Signals", len(df))
-m2.metric("✅ Passed Relevance Gate", len(_df_passed))
-m3.metric("⚪ Below Relevance Gate", _n_below)
+m2.metric("⚫ Expired / Closed", _n_all_exp)
+m3.metric("Remaining Signals", _n_remaining)
 
-# Row 2 — breakdown of gate-passed records
-st.caption("Breakdown of gate-passed records:")
-b1, b2, b3, b4 = st.columns(4)
-b1.metric("🔴 Active RFPs", _n_active)
-b2.metric("🟡 Predicted", _n_pred)
-b3.metric("⚫ Expired / Closed", _n_exp)
-b4.metric("🚨 Urgent (≤7 days)", _n_urgent, delta_color="inverse")
+# Row 2 — breakdown of remaining: gate result + actionable counts
+st.caption("Breakdown of remaining signals:")
+_n_passed_live  = len(_df_passed) - int(_df_passed["bucket"].isin(_EXPIRED_BUCKETS).sum())
+_n_below_live   = _n_below - int(((df["passed_gate"] == 0) & df["bucket"].isin(_EXPIRED_BUCKETS)).sum())
+b1, b2, b3, b4, b5 = st.columns(5)
+b1.metric("✅ Passed Relevance Gate", _n_passed_live)
+b2.metric("⚪ Below Relevance Gate", _n_below_live)
+b3.metric("🔴 Active RFPs", _n_active)
+b4.metric("🟡 Predicted", _n_pred)
+b5.metric("🚨 Urgent (≤7 days)", _n_urgent, delta_color="inverse")
 
 # ── Filters (always visible) ──────────────────────────────────────────────────
 if "filter_reset" not in st.session_state:
@@ -456,7 +460,8 @@ _fk = st.session_state.filter_reset
 # are cleared when widgets aren't rendered, but these _pf_* keys are not).
 _pf_defaults = {"_pf_keyword": "", "_pf_bucket": "All", "_pf_agency": "All",
                 "_pf_worktype": "All", "_pf_due": "Any", "_pf_score": 0.0,
-                "_pf_hide_exp": True, "_pf_flagged": False, "_pf_show_all": False}
+                "_pf_hide_exp": True, "_pf_flagged": False, "_pf_show_all": False,
+                "_pf_urgent": False}
 for k, v in _pf_defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
@@ -500,7 +505,7 @@ with f6:
     min_score = st.slider("Min Score", 0.0, 1.0, st.session_state["_pf_score"], 0.05, key=f"ms_{_fk}")
     st.session_state["_pf_score"] = min_score
 
-cb1, cb2, cb3, _, clr = st.columns([1.5, 1.8, 1.8, 2, 1.5])
+cb1, cb2, cb3, cb4, clr = st.columns([1.5, 1.8, 1.8, 1.5, 1.5])
 with cb1:
     hide_expired = st.checkbox("Hide expired & closed", value=st.session_state["_pf_hide_exp"], key=f"he_{_fk}")
     st.session_state["_pf_hide_exp"] = hide_expired
@@ -510,6 +515,9 @@ with cb2:
 with cb3:
     show_all = st.checkbox("Show all signals (incl. below-gate)", value=st.session_state["_pf_show_all"], key=f"sa_{_fk}")
     st.session_state["_pf_show_all"] = show_all
+with cb4:
+    urgent_only = st.checkbox("🚨 Urgent only (≤7 days)", value=st.session_state["_pf_urgent"], key=f"urg_{_fk}")
+    st.session_state["_pf_urgent"] = urgent_only
 with clr:
     st.markdown("<div style='margin-top:4px'>", unsafe_allow_html=True)
     if st.button("Clear filters", use_container_width=True):
@@ -533,6 +541,8 @@ if min_score > 0.0:
     view = view[view["rfp_likelihood"].fillna(0) >= min_score]
 if show_flagged:
     view = view[view["flagged_for_review"] == 1]
+if urgent_only:
+    view = view[view["next_step"].str.contains("URGENT", na=False)]
 if hide_expired and bucket_filter not in _EXPIRED_BUCKETS:
     view = view[~view["bucket"].isin(_EXPIRED_BUCKETS)]
 if due_window != "Any":
@@ -557,7 +567,12 @@ if due_window != "Any":
 sorted_view = view.sort_values("rfp_likelihood", ascending=False, na_position="last")
 
 above_gate = sorted_view[sorted_view["passed_gate"] == 1]
-below_gate = sorted_view[sorted_view["passed_gate"] == 0]
+# Below-gate expander shows only non-expired records (expired have their own filter).
+_below_all = (
+    df[(df["passed_gate"] == 0) & ~df["bucket"].isin(_EXPIRED_BUCKETS)]
+    .sort_values("rfp_likelihood", ascending=False, na_position="last")
+)
+below_gate = sorted_view[sorted_view["passed_gate"] == 0] if show_all else _below_all
 
 # When "show all" is on, merge below-gate rows at the end of the main list
 main_list = sorted_view if show_all else above_gate
@@ -601,24 +616,25 @@ def _render_row(r, muted: bool = False):
                 st.rerun()
 
 if show_all:
-    # Merged view: gate-passed first (scored), then below-gate (muted)
+    # Merged view: gate-passed first (scored), then below-gate (muted, filter-aware)
+    _below_show_all = sorted_view[sorted_view["passed_gate"] == 0]
     for _, r in above_gate.iterrows():
         _render_row(r, muted=False)
-    if len(below_gate) > 0:
+    if len(_below_show_all) > 0:
         st.divider()
-        st.caption(f"⚪ Below relevance gate — {len(below_gate)} records (muted)")
-        for _, r in below_gate.iterrows():
+        st.caption(f"⚪ Below relevance gate — {len(_below_show_all)} records (muted)")
+        for _, r in _below_show_all.iterrows():
             _render_row(r, muted=True)
 else:
-    # Default: gate-passed in main list; below-gate in collapsed expander
+    # Default: gate-passed in main list; below-gate in collapsed expander (always full set)
     for _, r in above_gate.iterrows():
         _render_row(r, muted=False)
-    if len(below_gate) > 0:
+    if len(_below_all) > 0:
         st.divider()
-        with st.expander(f"⚪ Below Relevance Gate — {len(below_gate)} records"):
+        with st.expander(f"⚪ Below Relevance Gate — {len(_below_all)} records"):
             st.caption(
                 "These records did not match any GMG service type keyword or Georgia geography. "
-                "Review if you think a keyword was missed. Enable 'Show all signals' above to see them in the main list."
+                "Expired / closed records are excluded — use the filter above to show them."
             )
-            for _, r in below_gate.iterrows():
+            for _, r in _below_all.iterrows():
                 _render_row(r, muted=True)
