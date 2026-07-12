@@ -151,6 +151,78 @@ def purge_expired(db_path: Path = DB_PATH) -> int:
         conn.close()
 
 
+def rescore_existing(db_path: Path = DB_PATH) -> int:
+    """Re-tag and re-score all rows using current SERVICE_TYPE_KEYWORDS.
+
+    Called after keyword updates so existing DB records pick up the new rules
+    without requiring a full pipeline re-run against live sources.
+    """
+    import json
+    from datetime import date
+
+    from nlp.tagging import tag_record
+    from scoring.engine import relevance_gate, rfp_likelihood_score, REVIEW_THRESHOLD
+
+    conn = get_connection(db_path)
+    conn.row_factory = sqlite3.Row
+    rows = [dict(r) for r in conn.execute("SELECT * FROM opportunities").fetchall()]
+    conn.row_factory = None
+
+    today = date.today()
+    # Only rescore gate-failed rows; gate-passed rows used status_line during
+    # original ingestion (not stored in DB) and should keep their scores.
+    rows = [r for r in rows if not r.get("passed_gate")]
+
+    with conn:
+        cur = conn.cursor()
+        for r in rows:
+            record = {
+                "title": r.get("title") or "",
+                "agency": r.get("agency") or "",
+                "bucket": r.get("bucket") or "",
+                "status_line": "",        # not persisted in DB; title carries most signal
+                "source_url": r.get("source_url") or "",
+            }
+            tagged = tag_record(record)
+            geography_text = f"{record['agency']} {record['title']} {record['source_url']}"
+            passed, reason = relevance_gate(tagged, None, geography_text)
+
+            bucket = r.get("bucket") or "Unknown"
+            stored_due = r.get("due_date")
+            if bucket == "1 - Active RFP" and stored_due:
+                try:
+                    if date.fromisoformat(stored_due) < today:
+                        bucket = "Expired RFP (past due)"
+                except ValueError:
+                    pass
+            is_expired = bucket in ("Expired RFP (past due)", "Awarded", "Cancelled")
+
+            if passed:
+                likelihood = rfp_likelihood_score(tagged, today)
+                flagged = (not is_expired) and likelihood >= REVIEW_THRESHOLD
+            else:
+                likelihood = None
+                flagged = False
+
+            cur.execute(
+                """
+                UPDATE opportunities
+                SET passed_gate=?, gate_reason=?, rfp_likelihood=?,
+                    flagged_for_review=?, service_types=?, signal_types=?
+                WHERE id=?
+                """,
+                (
+                    int(passed), reason,
+                    likelihood, int(flagged),
+                    json.dumps(tagged.service_types),
+                    json.dumps(tagged.signal_types),
+                    r["id"],
+                ),
+            )
+    conn.close()
+    return len(rows)
+
+
 def fetch_all(db_path: Path = DB_PATH) -> List[dict]:
     conn = get_connection(db_path)
     conn.row_factory = sqlite3.Row

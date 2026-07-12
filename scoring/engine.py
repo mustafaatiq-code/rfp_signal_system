@@ -53,11 +53,23 @@ PIPELINE_STAGE_SCORE = {
 
 GEOGRAPHY_KEYWORDS = [
     # Georgia
-    "georgia", "gwinnett", "fulton", "henry", "south fulton", "atlanta",
+    "georgia",
+    # GA government URL patterns (covers ssl.doas.state.ga.us / GPR, countyga.gov, etc.)
+    "state.ga.us", "ga.gov",
+    # GA-specific road funding programs (implies Georgia by definition)
+    "lmig", "tsplost",
+    # Metro Atlanta counties
+    "gwinnett", "fulton", "henry", "south fulton", "atlanta", "dekalb", "cobb",
+    "cherokee", "fayette", "forsyth", "newton", "barrow", "walton", "rockdale",
+    "paulding", "douglas", "coweta", "spalding",
+    # GA cities / agencies common in our data
+    "chamblee", "decatur", "alpharetta", "roswell", "marietta", "smyrna",
+    "canton", "cumming", "norcross", "duluth", "lawrenceville", "conyers",
+    "newnan", "carrollton", "brookhaven", "buford", "albany", "augusta",
+    "marta", "atlanta regional",     # ARC/MARTA
+    "gdot", "bartow",
     # Florida
     "florida", "fdot",
-    # State abbreviations — kept short to avoid false positives ("ga" catches "saga")
-    # so we rely on full names above; " ga " and " fl " are too risky to add.
 ]
 
 
@@ -127,7 +139,7 @@ def relevance_gate(tagged: TaggedRecord, est_budget: Optional[float],
     is added to the NLP layer and wired through run_pipeline.py.
     """
     if not tagged.service_types:
-        return False, "No matching service type (CEI/Planning/Program Mgmt/Traffic Ops/A&E)"
+        return False, "No matching service type (Construction Engineering & Inspection / Planning / Program Management / Traffic Operations / Architecture & Engineering)"
     if not any(kw in geography_text.lower() for kw in GEOGRAPHY_KEYWORDS):
         return False, "Outside Phase 1 Georgia geography"
     if est_budget is not None and est_budget < MIN_BUDGET:

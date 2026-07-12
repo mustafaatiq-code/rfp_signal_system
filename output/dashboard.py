@@ -233,7 +233,7 @@ df["next_step"] = df.apply(next_step, axis=1)
 if st.session_state.selected_id is not None:
     back_col, _ = st.columns([2, 8])
     with back_col:
-        if st.button("< Back to List", type="secondary", use_container_width=True):
+        if st.button("< Back to List", type="primary", use_container_width=True):
             st.session_state.selected_id = None
             st.rerun()
 
@@ -426,13 +426,19 @@ if st.session_state.selected_id is not None:
 
 # ── Metrics ───────────────────────────────────────────────────────────────────
 _EXPIRED_BUCKETS = {"Expired RFP (past due)", "Awarded", "Cancelled"}
+_df_passed = df[df["passed_gate"] == 1]   # metrics show only relevance-passed records
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Total signals", len(df))
-c2.metric("🔴 Active RFPs", int((df["bucket"] == "1 - Active RFP").sum()))
-c3.metric("🟡 Predicted", int((df["bucket"] == "2 - Predicted").sum()))
-c4.metric("⚫ Expired / Closed", int(df["bucket"].isin(_EXPIRED_BUCKETS).sum()))
-urgent = df["next_step"].str.contains("URGENT", na=False).sum()
+c2.metric("🔴 Active RFPs", int((_df_passed["bucket"] == "1 - Active RFP").sum()))
+c3.metric("🟡 Predicted", int((_df_passed["bucket"] == "2 - Predicted").sum()))
+c4.metric("⚫ Expired / Closed", int(_df_passed["bucket"].isin(_EXPIRED_BUCKETS).sum()))
+urgent = _df_passed["next_step"].str.contains("URGENT", na=False).sum()
 c5.metric("🚨 Urgent (≤7 days)", int(urgent), delta_color="inverse")
+_n_below = int((df["passed_gate"] == 0).sum())
+st.caption(
+    f"⚪ **{_n_below} records below relevance gate** — no matched GMG service type or Georgia geography. "
+    f"Shown separately at the bottom of the list."
+)
 
 # ── Filters (always visible) ──────────────────────────────────────────────────
 if "filter_reset" not in st.session_state:
@@ -540,34 +546,60 @@ if due_window != "Any":
 # ── List view ─────────────────────────────────────────────────────────────────
 sorted_view = view.sort_values("rfp_likelihood", ascending=False, na_position="last")
 
+# Split into gate-passed (main list) and gate-failed (separate section)
+above_gate = sorted_view[sorted_view["passed_gate"] == 1]
+below_gate = sorted_view[sorted_view["passed_gate"] == 0]
+
 hdr_left, hdr_right = st.columns([6, 1])
-hdr_left.subheader(f"Ranked Opportunity List  —  {len(sorted_view)} records")
+hdr_left.subheader(f"Ranked Opportunity List  —  {len(above_gate)} records")
 with hdr_right:
     export_cols = ["title", "agency", "work_type", "bucket", "due_date", "rfp_likelihood", "next_step", "source_url"]
     export_cols = [c for c in export_cols if c in sorted_view.columns]
-    csv_bytes = sorted_view[export_cols].to_csv(index=False).encode("utf-8")
+    csv_bytes = above_gate[export_cols].to_csv(index=False).encode("utf-8")
     st.download_button("Download CSV", csv_bytes, "opportunities.csv", "text/csv", use_container_width=True)
 
-for _, r in sorted_view.iterrows():
+def _render_row(r, muted: bool = False):
     ns = str(r.get("next_step", ""))
     title = str(r.get("title", "Untitled"))
     agency = str(r.get("agency", "") or "")
     work_type = str(r.get("work_type", "") or "")
     due = str(r.get("due_date", "") or "Not specified")
     score = r.get("rfp_likelihood")
-    score_str = f"{score:.2f}" if score is not None else "N/A"
+    score_str = f"{score:.2f}" if score is not None and not (isinstance(score, float) and pd.isna(score)) else "N/A"
+    text_color = "#999" if muted else "#555"
+    val_color = "#bbb" if muted else "#222"
 
     with st.container(border=True):
         left, right = st.columns([8, 1])
         with left:
-            st.markdown(f"**{title}**")
+            title_md = f"<span style='color:{val_color}'>{title}</span>" if muted else f"**{title}**"
+            st.markdown(title_md, unsafe_allow_html=True)
             st.markdown(
-                f"<span style='font-size:0.82rem;color:#555'>{ns} &nbsp;|&nbsp; {agency} &nbsp;|&nbsp; {work_type}"
-                f" &nbsp;|&nbsp; Due: <b style='color:#222;font-size:0.9rem'>{due}</b>"
-                f" &nbsp;|&nbsp; Score: <b style='color:#222;font-size:0.9rem'>{score_str}</b></span>",
+                f"<span style='font-size:0.82rem;color:{text_color}'>{ns} &nbsp;|&nbsp; {agency} &nbsp;|&nbsp; {work_type}"
+                f" &nbsp;|&nbsp; Due: <b style='color:{val_color};font-size:0.9rem'>{due}</b>"
+                f" &nbsp;|&nbsp; Score: <b style='color:{val_color};font-size:0.9rem'>{score_str}</b></span>",
                 unsafe_allow_html=True,
             )
         with right:
-            if st.button("View", key=f"row_{r['solicitation_id']}", use_container_width=True):
-                st.session_state.selected_id = r["solicitation_id"]
-                st.rerun()
+            if not muted:
+                if st.button("View", key=f"row_{r['solicitation_id']}", use_container_width=True):
+                    st.session_state.selected_id = r["solicitation_id"]
+                    st.rerun()
+            else:
+                if st.button("View", key=f"row_{r['solicitation_id']}", use_container_width=True,
+                             type="secondary", disabled=False):
+                    st.session_state.selected_id = r["solicitation_id"]
+                    st.rerun()
+
+for _, r in above_gate.iterrows():
+    _render_row(r, muted=False)
+
+if len(below_gate) > 0:
+    st.divider()
+    with st.expander(f"⚪ Below Relevance Gate — {len(below_gate)} records (no matched GMG service type)"):
+        st.caption(
+            "These records did not match any GMG service type keyword or Georgia geography. "
+            "Review if you think a keyword was missed. Flag to the team to add it."
+        )
+        for _, r in below_gate.iterrows():
+            _render_row(r, muted=True)

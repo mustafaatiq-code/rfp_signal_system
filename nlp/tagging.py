@@ -28,12 +28,35 @@ SERVICE_TYPE_KEYWORDS = {
         "sidewalk", "pedestrian improvement", "pedestrian project",
         "roadway improvement", "road improvement", "street improvement",
         "intersection improvement", "pavement", "resurfacing",
+        # Road programs and construction types common in Georgia procurement
+        "lmig",                           # Local Maintenance & Improvement Grant (GA DOT)
+        "tsplost", "splost",              # SPLOST/TSPLOST-funded transportation construction
+        "widening",                       # road widening projects
+        "road rehabilitation", "roadway rehabilitation", "road rehab",
+        "road reconstruction", "street reconstruction",
+        "road project",                   # generic (e.g. "SR 166 @ Chapel Hill Road Project")
+        "bridge construction", "bridge repair", "bridge project",
+        "pedestrian bridge", "bike bridge",
+        "culvert",                        # box culvert repairs = road drainage infrastructure
+        "trail",                          # multi-use trail / path projects
+        "boardwalk",                      # pedestrian boardwalk / shared path
+        "asphalt paving",
+        "milling",                        # milling & resurfacing (road maintenance)
+        "bridge replacement",             # bridge replacement projects
+        "interchange",                    # highway interchange construction/improvement
+        "pedestrian",                     # pedestrian crossing, walk, bridge, etc.
+        "transportation project",         # e.g. "DeKalb County Transportation Projects"
     ],
     "Planning": [
         "planning", "needs assessment", "feasibility study",
         "comprehensive transportation plan", "transportation planning",
         "corridor study", "environmental impact", "environmental assessment",
         "transportation study", "mobility study",
+        "transportation plan",             # 2050 Metropolitan Transportation Plan, TIP, etc.
+        "transportation improvement program",
+        "transit oriented",               # transit-oriented development (TOD)
+        "bus network", "transit network", # transit network redesign studies
+        "roads to schools", "road to school",
     ],
     "Program Management": [
         "program management", "program mgmt", "cip program",
@@ -47,6 +70,9 @@ SERVICE_TYPE_KEYWORDS = {
         "work zone", "incident management", "tmc", "traffic management",
         "pedestrian signal", "crosswalk", "roundabout", "access management",
         "safety improvement", "corridor safety",
+        "traffic calming",                # traffic calming improvements
+        "safe routes",                    # Safe Routes to School / Transit program
+        "safe streets",                   # Safe Streets for All (federal program)
     ],
     "Architecture & Engineering": [
         "architectural", "engineering services", "a&e", "design services",
