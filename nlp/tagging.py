@@ -53,6 +53,37 @@ SERVICE_TYPE_KEYWORDS = {
         "grade separation",               # railroad/road grade crossing projects
         "operational improvement",        # "Operational Improvements along MLK Jr Drive"
         "safety project",                 # road safety projects
+        # Paving (general — not just asphalt)
+        "road paving", "street paving", "paving project", "paving program",
+        "dirt road paving", "unpaved road", "gravel road", "chip seal",
+        "microsurfacing", "slurry seal", "crack seal",
+        # Pavement marking / striping
+        "pavement marking", "pavement markings", "lane marking", "road marking",
+        "striping", "restriping", "centerline", "centreline",
+        "edge line", "edge stripe", "thermoplastic", "epoxy marking",
+        # Parkway / avenue / boulevard improvements (road types appearing in titles)
+        "parkway improvement", "avenue improvement", "boulevard improvement",
+        "parkway project", "avenue project",
+        # Access and driveway infrastructure
+        "access road", "driveway apron",
+        # Road maintenance / repair
+        "road maintenance", "road repair", "pothole", "crack repair",
+        "concrete repair", "concrete paving", "concrete roadway",
+        # Retaining walls, barriers, noise walls (highway infrastructure)
+        "retaining wall", "noise barrier", "sound wall", "crash barrier",
+        "traffic barrier", "concrete barrier", "jersey barrier",
+        # Median, lane, and turn construction
+        "median improvement", "median construction", "median barrier",
+        "turn lane", "acceleration lane", "deceleration lane", "u-turn",
+        "road diet",                     # lane reduction for safety/active transport
+        # Transit stop infrastructure (CEI scope on road projects)
+        "bus pad", "bus shelter", "bus stop improvement", "bus turnout",
+        # Railroad / grade crossing
+        "railroad crossing", "grade crossing", "at-grade crossing",
+        # Utility relocation in highway right-of-way
+        "utility relocation", "utility adjustment",
+        # Erosion / sediment (highway construction context)
+        "erosion control", "silt fence", "sediment control",
     ],
     "Planning": [
         "planning", "needs assessment", "feasibility study",
@@ -64,11 +95,31 @@ SERVICE_TYPE_KEYWORDS = {
         "transit oriented",               # transit-oriented development (TOD)
         "bus network", "transit network", # transit network redesign studies
         "roads to schools", "road to school",
+        # Active and multimodal transportation planning
+        "complete streets", "active transportation", "active travel",
+        "multimodal", "multi-modal", "non-motorized",
+        "bicycle plan", "bike plan", "bicycle network",
+        "pedestrian plan", "walk audit", "walkability",
+        "freight study", "freight plan", "freight corridor",
+        "travel demand", "origin destination", "traffic model",
+        "visioning study", "route study", "alignment study",
+        "interchange justification", "project development",
+        # Environmental / noise / drainage studies tied to transportation
+        "noise study", "traffic noise", "drainage study", "hydraulic study",
+        "categorical exclusion", "ce document",
+        # Safety planning
+        "highway safety plan", "strategic highway safety",
+        "road safety audit", "safety study",
     ],
     "Program Management": [
         "program management", "program mgmt", "cip program",
         "construction program", "program support", "program manager",
         "project management support",
+        "construction oversight", "construction management services",
+        "owner's representative", "owners representative", "owner representative",
+        "quality assurance program", "qa/qc program", "quality management",
+        "project controls", "schedule management", "cost management",
+        "transportation program", "capital program management",
     ],
     "Traffic Operations": [
         "traffic ops", "traffic operations", "traffic study",
@@ -80,6 +131,27 @@ SERVICE_TYPE_KEYWORDS = {
         "traffic calming",                # traffic calming improvements
         "safe routes",                    # Safe Routes to School / Transit program
         "safe streets",                   # Safe Streets for All (federal program)
+        "safe roads", "road safety",      # road safety programs
+        # Street / roadway lighting (transportation infrastructure)
+        "street lighting", "roadway lighting", "highway lighting",
+        "pedestrian lighting", "streetlight", "street light",
+        # Signing and marking (traffic operations scope)
+        "traffic signing", "road signs", "sign replacement", "sign installation",
+        "delineator", "guardrail",
+        # Signal timing and performance
+        "signal timing", "signal coordination", "signal optimization",
+        "corridor signal", "arterial signal", "atspm",
+        "arterial management", "adaptive signal", "connected signal",
+        # Dynamic/variable message signs
+        "dynamic message sign", "variable message sign", "dms ", "vms ",
+        "changeable message", "highway advisory",
+        # Traffic monitoring and detection
+        "traffic camera", "cctv", "video detection", "traffic monitoring",
+        "traffic counting", "speed monitoring", "speed feedback", "radar sign",
+        "fiber optic", "communications infrastructure",
+        # School zone / pedestrian safety hardware
+        "school zone", "school flasher", "school beacon",
+        "rectangular rapid flash", "rrfb", "hawk signal",
     ],
     "Architecture & Engineering": [
         "architectural", "engineering services", "a&e", "design services",
@@ -90,6 +162,20 @@ SERVICE_TYPE_KEYWORDS = {
         "transit center", "design documents", "30% design", "60% design",
         "90% design", "preliminary design", "final design",
         "classroom reconfiguration",  # kept for Fulton-style test fixture
+        # Specialty transportation design
+        "traffic impact study", "traffic impact analysis", "tia ",
+        "noise wall design", "retaining wall design", "wall design",
+        "utility design", "drainage engineering",
+        "load rating", "bridge inspection", "bridge load",
+        "seismic retrofit", "bridge scour", "scour analysis",
+        "as-built", "record drawings", "construction documents",
+        "interchange design", "ramp design", "flyover design",
+        "traffic engineering study", "signal design",
+        "landscape architecture", "streetscape design",
+        "value engineering", "ve study",
+        "subsurface investigation", "soil boring", "ground penetrating",
+        "topographic survey", "boundary survey", "gps survey",
+        "photogrammetry", "lidar survey", "aerial survey",
     ],
 }
 
