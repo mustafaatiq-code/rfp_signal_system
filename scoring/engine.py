@@ -36,7 +36,7 @@ SOURCE_WEIGHTS = {
     "Capital Budget": 0.9,
     "State Budget Session": 0.85,
     "Legislation": 0.7,
-    "Planning Study": 0.6,
+    "Planning": 0.6,
     "Political Meetings": 0.5,
     "News / Press": 0.3,
     "Active RFP": 1.0,
@@ -218,7 +218,7 @@ def _source_weight(tagged: TaggedRecord) -> float:
         non_rfp = [s for s in tagged.signal_types if s != "Active RFP"]
         if non_rfp:
             return max(SOURCE_WEIGHTS.get(s, 0.3) for s in non_rfp)
-        return SOURCE_WEIGHTS["Planning Study"]   # 0.6 floor when only signal was "Active RFP"
+        return SOURCE_WEIGHTS["Planning"]   # 0.6 floor when only signal was "Active RFP"
     return raw
 
 

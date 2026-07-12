@@ -229,7 +229,7 @@ SIGNAL_TYPE_KEYWORDS = {
         "house bill", "senate bill", "act signed", "public law",
         "infrastructure investment", "bipartisan infrastructure",
     ],
-    "Planning Study": [
+    "Planning": [
         "needs assessment", "planning study", "corridor study",
         "feasibility study", "master plan", "long range plan",
         "transportation improvement program", "lrtp",
@@ -237,6 +237,10 @@ SIGNAL_TYPE_KEYWORDS = {
         # GDOT ArcGIS Hub project pages — active projects in GDOT's program pipeline
         "active gdot project", "cei solicitation status unverified",
         "gdot hub", "gdot.hub.arcgis.com", "arcgis hub",
+        # Predicted bucket = explicitly classified as a pipeline project by a parser.
+        # The bucket value is included in the tagging blob, so this fires on any
+        # Predicted record that has no other signal keyword in its title/status_line.
+        "2 - predicted",
     ],
     "News / Press": [
         "press release", "news article", "announced", "proposed",

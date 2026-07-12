@@ -124,7 +124,7 @@ with st.sidebar:
     st.caption("Exponential decay by age. Current year→1.00 · 1 yr→0.55 · 2 yrs→0.30 · 3 yrs→0.17")
 
     st.markdown("**Source Strength** (20%)")
-    st.caption("Highest-weight signal found. SPLOST/RFP→1.00 · Bond/Capital→0.90 · State Budget→0.85 · Legislation→0.70 · Planning Study→0.60 · Political→0.50 · News→0.30")
+    st.caption("Highest-weight signal found. SPLOST/RFP→1.00 · Bond/Capital→0.90 · State Budget→0.85 · Legislation→0.70 · Planning→0.60 · Political→0.50 · News→0.30")
 
     st.markdown("**Pipeline Stage** (15%)")
     st.caption("Active RFP→1.00 · Predicted→0.50 · Unknown→0.30 · Expired/Closed→0.00")
@@ -333,7 +333,7 @@ if st.session_state.selected_id is not None:
             _SOURCE_W = {
                 "SPLOST": 1.0, "Bond Issuance": 0.9, "Capital Budget": 0.9,
                 "State Budget Session": 0.85, "Legislation": 0.7,
-                "Planning Study": 0.6, "Political Meetings": 0.5,
+                "Planning": 0.6, "Political Meetings": 0.5,
                 "News / Press": 0.3, "Active RFP": 1.0,
             }
             _PIPE_W = {
@@ -358,7 +358,7 @@ if st.session_state.selected_id is not None:
                     f"'Active RFP' excluded for Predicted bucket; strongest remaining signal: "
                     f"'{max(non_rfp, key=lambda s: _SOURCE_W.get(s,0.3))}' → weight {source_w:.2f}"
                     if non_rfp else
-                    "Only 'Active RFP' detected — capped to 0.60 (Planning Study floor) for Predicted bucket"
+                    "Only 'Active RFP' detected — capped to 0.60 (Planning floor) for Predicted bucket"
                 )
             else:
                 source_w = round(raw_sw, 4)
