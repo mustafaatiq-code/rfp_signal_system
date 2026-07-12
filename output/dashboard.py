@@ -444,12 +444,11 @@ m3.metric("Remaining Signals", _n_remaining)
 st.caption("Breakdown of remaining signals:")
 _n_passed_live  = len(_df_passed) - int(_df_passed["bucket"].isin(_EXPIRED_BUCKETS).sum())
 _n_below_live   = _n_below - int(((df["passed_gate"] == 0) & df["bucket"].isin(_EXPIRED_BUCKETS)).sum())
-b1, b2, b3, b4, b5 = st.columns(5)
+b1, b2, b3, b4 = st.columns(4)
 b1.metric("✅ Passed Relevance Gate", _n_passed_live)
 b2.metric("⚪ Below Relevance Gate", _n_below_live)
 b3.metric("🔴 Active RFPs", _n_active)
 b4.metric("🟡 Predicted", _n_pred)
-b5.metric("🚨 Urgent (≤7 days)", _n_urgent, delta_color="inverse")
 
 # ── Filters (always visible) ──────────────────────────────────────────────────
 if "filter_reset" not in st.session_state:

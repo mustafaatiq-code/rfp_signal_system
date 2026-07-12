@@ -234,6 +234,9 @@ SIGNAL_TYPE_KEYWORDS = {
         "feasibility study", "master plan", "long range plan",
         "transportation improvement program", "lrtp",
         "environmental study", "eis ", "ea ", "environmental assessment",
+        # GDOT ArcGIS Hub project pages — active projects in GDOT's program pipeline
+        "active gdot project", "cei solicitation status unverified",
+        "gdot hub", "gdot.hub.arcgis.com", "arcgis hub",
     ],
     "News / Press": [
         "press release", "news article", "announced", "proposed",
