@@ -87,6 +87,15 @@ section[data-testid="stVerticalBlockBorderWrapper"] {
 h2, h3 { margin-top: 0.3rem !important; margin-bottom: 0.3rem !important; }
 /* Hide Streamlit's auto-added anchor link icon on headings */
 h2 a, h3 a { display: none !important; }
+/* Always-visible dark scrollbar on cards and inner containers */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #666 transparent;
+}
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #666; border-radius: 3px; }
+*::-webkit-scrollbar-thumb:hover { background: #444; }
 </style>
 """, unsafe_allow_html=True)
 
