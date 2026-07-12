@@ -46,6 +46,13 @@ SERVICE_TYPE_KEYWORDS = {
         "interchange",                    # highway interchange construction/improvement
         "pedestrian",                     # pedestrian crossing, walk, bridge, etc.
         "transportation project",         # e.g. "DeKalb County Transportation Projects"
+        "corridor project", "corridor improvement",
+        "rebuild",                        # e.g. "I-285 Westside Rebuild"
+        "frontage road", "frontage",      # frontage road construction
+        "drive improvement", "road improvement project",
+        "grade separation",               # railroad/road grade crossing projects
+        "operational improvement",        # "Operational Improvements along MLK Jr Drive"
+        "safety project",                 # road safety projects
     ],
     "Planning": [
         "planning", "needs assessment", "feasibility study",
@@ -240,11 +247,13 @@ SIGNAL_TYPE_KEYWORDS = {
     ],
 }
 
-# Road suffix words used in "[Road Name] at/@ [Road Name]" intersection project titles.
-# Matches patterns like "Rose Avenue at Roselake Circle", "SR 166 @ Chapel Hill Road".
+# Road/highway identifiers for intersection project titles.
+# Covers named roads (Rose Avenue, Chapel Hill Road) and highway numbers (I-16, US 280, SR 8).
 _ROAD_SUFFIXES = r"(?:road|rd|street|st|avenue|ave|boulevard|blvd|drive|dr|lane|ln|parkway|pkwy|way|circle|court|ct|place|pl|terrace|tr|highway|hwy|pike)"
+_HWY_NUMBER   = r"(?:I|US|SR|GA|HWY|RTE?)-?\s*\d+"
+_ROAD_ID      = rf"(?:{_ROAD_SUFFIXES}|{_HWY_NUMBER})"
 _ROAD_INTERSECTION_RE = re.compile(
-    rf"\b{_ROAD_SUFFIXES}\b.{{0,40}}(?:\bat\b|@).{{0,40}}\b{_ROAD_SUFFIXES}\b",
+    rf"(?:{_ROAD_ID}).{{0,50}}(?:\bat\b|@).{{0,50}}(?:{_ROAD_ID})",
     re.IGNORECASE,
 )
 

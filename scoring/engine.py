@@ -130,6 +130,45 @@ def effective_bucket(record: dict, today: Optional[date] = None) -> str:
     return bucket
 
 
+# Work-type exclusions: projects that match service-type keywords by accident but
+# are NOT in GMG's scope.  Checked against the full record title text.
+# Exclusion fires only when the title clearly describes non-GMG work AND the
+# phrase is specific enough to avoid false positives (e.g. "water system" not
+# "water" alone, since "stormwater" is adjacent to road projects).
+_EXCLUSION_PHRASES: list[str] = [
+    # Stormwater / drainage utility (standalone, not highway drainage)
+    "stormwater improvement", "stormwater project", "stormwater facility",
+    "storm drainage improvement", "storm drainage project", "storm sewer",
+    "storm water improvement",
+    # Water supply / distribution utility
+    "water system", "water main", "waterline", "water line", "water service extension",
+    "water treatment", "water plant", "water facility", "water tower", "water tank",
+    "water and sewer", "water & sewer",
+    # Wastewater / sewer utility
+    "sewer system", "sewer line", "sewerline", "wastewater", "sewage treatment",
+    "sewage facility", "wwtp", "wrf",
+    # Building mechanical / facilities
+    "hvac", "cooling tower", "boiler", "chiller",
+    "roofing", "reroof", "roof replacement", "roof repair",
+    "kitchen equipment", "kitchen renovation",
+    # Solid waste / landfill
+    "landfill", "solid waste", "waste facility", "waste management facility",
+    # Lab / IT / specialty equipment
+    "laboratory equipment", "lab equipment", "calibration of lab",
+    "uninterrupted power supply", "generator replacement", "generator rental",
+    # Agriculture
+    "agricultural", "farming equipment",
+    # Parks non-transport
+    "archery range", "archery trail",
+    # Demolition of buildings (non-road clearance)
+    "demolition of ", "demolish ",
+    # Federal / out-of-state facilities
+    "va palo alto", "nawcad",
+    # Mobile office / temporary building facilities
+    "mobile office trailer",
+]
+
+
 def relevance_gate(tagged: TaggedRecord, est_budget: Optional[float],
                     geography_text: str) -> tuple[bool, str]:
     """Step 1: binary PASS/FAIL gate.
@@ -144,6 +183,11 @@ def relevance_gate(tagged: TaggedRecord, est_budget: Optional[float],
         return False, "News/press article only — no procurement, funding, or planning signal detected"
     if not any(kw in geography_text.lower() for kw in GEOGRAPHY_KEYWORDS):
         return False, "Outside Phase 1 Georgia geography"
+    # Exclude work types outside GMG's scope even if a service-type keyword matched
+    title_l = (tagged.record.get("title") or "").lower()
+    for phrase in _EXCLUSION_PHRASES:
+        if phrase in title_l:
+            return False, f"Non-GMG work type — '{phrase}' indicates utilities / facilities / non-transport scope"
     if est_budget is not None and est_budget < MIN_BUDGET:
         return False, f"Below minimum project budget (${MIN_BUDGET:,})"
     return True, "PASS"

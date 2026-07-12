@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS opportunities (
 """
 
 # Columns added after the first schema version; applied to pre-existing DBs.
-_MIGRATIONS = {"due_date": "TEXT", "is_expired": "INTEGER"}
+_MIGRATIONS = {"due_date": "TEXT", "is_expired": "INTEGER", "status_line": "TEXT"}
 
 
 def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
@@ -65,8 +65,9 @@ def upsert_opportunities(opps: List[ScoredOpportunity],
                     INSERT INTO opportunities
                         (agency, title, solicitation_id, year, bucket, passed_gate,
                          gate_reason, rfp_likelihood, flagged_for_review,
-                         service_types, signal_types, source_url, due_date, is_expired)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         service_types, signal_types, source_url, due_date, is_expired,
+                         status_line)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(agency, solicitation_id) DO UPDATE SET
                         title=excluded.title, year=excluded.year, bucket=excluded.bucket,
                         passed_gate=excluded.passed_gate, gate_reason=excluded.gate_reason,
@@ -75,7 +76,8 @@ def upsert_opportunities(opps: List[ScoredOpportunity],
                         service_types=excluded.service_types,
                         signal_types=excluded.signal_types,
                         source_url=excluded.source_url,
-                        due_date=excluded.due_date, is_expired=excluded.is_expired
+                        due_date=excluded.due_date, is_expired=excluded.is_expired,
+                        status_line=excluded.status_line
                     """,
                     (
                         r.get("agency"), r.get("title"), r.get("solicitation_id"),
@@ -83,6 +85,7 @@ def upsert_opportunities(opps: List[ScoredOpportunity],
                         o.rfp_likelihood, int(o.flagged_for_review),
                         json.dumps(o.service_types), json.dumps(o.signal_types),
                         r.get("source_url"), o.due_date, int(o.is_expired),
+                        r.get("status_line"),
                     ),
                 )
                 count += 1
@@ -180,7 +183,7 @@ def rescore_existing(db_path: Path = DB_PATH) -> int:
                 "title": r.get("title") or "",
                 "agency": r.get("agency") or "",
                 "bucket": r.get("bucket") or "",
-                "status_line": "",        # not persisted in DB; title carries most signal
+                "status_line": r.get("status_line") or "",
                 "source_url": r.get("source_url") or "",
             }
             tagged = tag_record(record)

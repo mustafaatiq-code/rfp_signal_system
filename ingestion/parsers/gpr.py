@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from datetime import date
 from typing import List, Optional
 
@@ -139,6 +140,76 @@ def _fetch_category(session, cat_type: str) -> List[dict]:
         if start >= total or not page_rows:
             break
     return rows
+
+
+def _fetch_nigp_codes(session, detail_url: str) -> List[str]:
+    """Fetch the GPR detail page and return NIGP codes found in the NIGP table.
+
+    GPR detail pages render a 'NIGP Codes' section with a Code/Description
+    table.  We find that section, then pull every 5-digit number from it.
+    Falls back to scanning the whole page for 5-digit numbers near the text
+    'nigp' if the structured table isn't found.
+
+    Returns a list of raw code strings, e.g. ['96883', '91347'].
+    """
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return []
+    try:
+        resp = session.get(
+            detail_url,
+            headers={"User-Agent": _CHROME_UA, "Accept": "text/html"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        logger.debug("GPR detail fetch failed %s: %s", detail_url, e)
+        return []
+
+    soup = BeautifulSoup(resp.text, "lxml")
+    codes: List[str] = []
+
+    # Strategy 1: find "NIGP Codes" heading then read the table beneath it
+    nigp_heading = None
+    for tag in soup.find_all(["h2", "h3", "h4", "th", "td", "label", "strong", "span", "div"]):
+        if "nigp" in tag.get_text(strip=True).lower():
+            nigp_heading = tag
+            break
+
+    if nigp_heading:
+        # Walk siblings / parent to find a table
+        container = nigp_heading.find_next("table")
+        if container is None:
+            container = nigp_heading.find_parent(["div", "section"])
+            if container:
+                container = container.find("table")
+        if container:
+            for td in container.find_all("td"):
+                m = re.match(r"^\s*(\d{5})\s*$", td.get_text(strip=True))
+                if m:
+                    codes.append(m.group(1))
+
+    # Strategy 2: fallback — search raw page text for 5-digit numbers near "nigp"
+    if not codes:
+        text = resp.text
+        for m in re.finditer(r"nigp.{0,120}?(\d{5})", text, re.IGNORECASE):
+            codes.append(m.group(1))
+        # Also reverse direction: 5-digit number within 80 chars before "nigp"
+        for m in re.finditer(r"(\d{5}).{0,80}?nigp", text, re.IGNORECASE):
+            if m.group(1) not in codes:
+                codes.append(m.group(1))
+
+    # Deduplicate while preserving order
+    seen: set = set()
+    result: List[str] = []
+    for c in codes:
+        if c not in seen:
+            seen.add(c)
+            result.append(c)
+
+    logger.debug("GPR detail %s → NIGP codes: %s", detail_url, result)
+    return result
 
 
 def fetch_and_parse() -> List[dict]:
