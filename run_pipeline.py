@@ -10,21 +10,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 from datetime import date
 from pathlib import Path
 
-# Load .env from project root so SAM_GOV_API_KEY etc. survive session restarts
-_env_file = Path(__file__).resolve().parent / ".env"
-if _env_file.exists():
-    for _line in _env_file.read_text().splitlines():
-        _line = _line.strip()
-        if _line and not _line.startswith("#") and "=" in _line:
-            _k, _v = _line.split("=", 1)
-            os.environ.setdefault(_k.strip(), _v.strip())
-
-from ingestion.parsers import henry_opengov, gdot_solicitation, gdot_major_projects, sam_gov, fdot_pda, gpr, marta, boarddocs, arc_news, cobb_transportation, gwinnett_purchasing, fayette_purchasing, bidnet_direct, bartow_county, newton_county
+from ingestion.parsers import henry_opengov, gdot_solicitation, gdot_major_projects, fdot_pda, gpr, marta, boarddocs, arc_news, cobb_transportation, gwinnett_purchasing, fayette_purchasing, bidnet_direct, bartow_county, newton_county
 from nlp.tagging import tag_records
 from scoring.engine import score_all
 from storage.db import upsert_opportunities, purge_expired, fetch_all
@@ -96,8 +86,7 @@ SOURCES = [
         "name": "gdot_solicitation",
         # GDOT's Professional Services portal — requires Microsoft Identity
         # (prequalified-consultant) login. fetch_and_parse() returns [] with a
-        # log explaining the auth path. Federal-aid GDOT projects flow in via
-        # the sam_gov source below.
+        # log explaining the auth path.
         "live_parser": gdot_solicitation.fetch_and_parse,
     },
     {
@@ -108,17 +97,10 @@ SOURCES = [
         "live_parser": gdot_major_projects.fetch_and_parse,
     },
     {
-        "name": "sam_gov",
-        # SAM.gov federal transportation opportunities (GA + FL).
-        # Requires SAM_GOV_API_KEY env var (free, 10 req/day).
-        # Uses 2 keywords x 2 states = 4 requests per run.
-        "live_parser": sam_gov.fetch_and_parse,
-    },
-    {
         "name": "fdot_pda",
         # FDOT Procurement Development Application — requires FDOT vendor
         # authentication (redirects to /Error/Forbidden without session).
-        # Degrades gracefully. Federal-aid FDOT projects flow via sam_gov.
+        # Degrades gracefully (returns [] when not authenticated).
         "live_parser": fdot_pda.fetch_and_parse,
     },
     {

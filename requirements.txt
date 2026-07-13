@@ -1,6 +1,20 @@
+# Runtime dependencies for the RFP Signal System pipeline + dashboard.
+#   pip install -r requirements.txt
+#
+# Playwright also needs a browser binary (one-time, not a pip package):
+#   playwright install chromium
+# Without it, JS-rendered sources (e.g. BidNet Direct) degrade gracefully to
+# zero records rather than crashing.
 streamlit>=1.35,<1.60
 pandas>=2.2,<3.0
 python-dateutil>=2.9
 requests>=2.31
 beautifulsoup4>=4.12
 lxml>=5.2
+playwright>=1.44
+
+# Optional — richer date/money entity extraction. The tagger falls back to
+# regex automatically when spaCy or its model is absent, so this is not
+# required for the pipeline to run:
+#   pip install spacy && python -m spacy download en_core_web_sm
+# spacy>=3.7

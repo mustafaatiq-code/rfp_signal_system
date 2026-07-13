@@ -18,25 +18,23 @@ Data Sources → Ingestion → NLP Tagging → Scoring → SQLite DB → Dashboa
 ### 1. Install dependencies
 
 ```bash
-pip install requests playwright python-dateutil streamlit beautifulsoup4
-playwright install chromium
+pip install -r requirements.txt
+playwright install chromium          # one-time browser download for JS sources
 ```
 
-### 2. API key (already saved)
+To also run the test suite, install the dev extras instead:
 
-The SAM.gov API key is stored in `.env` at the project root and loaded automatically. No action needed. To regenerate: register free at [sam.gov/profile/details](https://sam.gov/profile/details) (free tier = 10 req/day), then update `.env`:
-
-```
-SAM_GOV_API_KEY=your-key-here
+```bash
+pip install -r requirements-dev.txt
 ```
 
-### 3. Run the pipeline
+### 2. Run the pipeline
 
 ```bash
 python run_pipeline.py --live
 ```
 
-### 4. Launch the dashboard
+### 3. Launch the dashboard
 
 Double-click `start_dashboard.bat` **or** run:
 
@@ -46,13 +44,18 @@ python -m streamlit run output/dashboard.py
 
 Dashboard opens at **http://localhost:8501** — keep the terminal window open while using it.
 
-### 5. Run tests
+### 4. Run tests
 
 ```bash
 python -m pytest tests/
 ```
 
-All 51 tests are offline-capable (no API key or network required).
+All 45 tests are offline-capable (no API key or network required).
+
+### Deploying for GMG
+
+To host the dashboard on Streamlit Community Cloud (password-gated, with a
+data-refresh workflow), see **[DEPLOY.md](DEPLOY.md)**.
 
 ---
 
@@ -66,7 +69,6 @@ All 51 tests are offline-capable (no API key or network required).
 | **Cobb County Transportation** | `cobb_transportation.py` | 7 | Dedicated transportation bids (sidewalk, signal, transit) |
 | **Fayette County Purchasing** | `fayette_purchasing.py` | ~15 | County bids filtered for transportation keywords |
 | **Gwinnett County Purchasing** | `gwinnett_purchasing.py` | 4 | County bids filtered for transportation keywords |
-| **SAM.gov (federal)** | `sam_gov.py` | 4 | Federal transportation opportunities in GA + FL |
 | **BidNet Direct** | `bidnet_direct.py` | 3 | Cherokee, Douglas, Fulton, Clayton, Henry counties |
 | **ARC transportation news** | `arc_news.py` | 5 | TIP amendments, corridor studies, SPLOST votes (early signals) |
 | **Bartow County** | `bartow_county.py` | 1 | County project bids (MPO, Transit dept) |
@@ -171,10 +173,10 @@ The system detects upstream signals that typically precede an RFP by 6–24 mont
 |---|---|---|
 | SPLOST / TSPLOST referendum | BoardDocs, ARC News | 12–24 months |
 | TIP Amendment adoption | ARC News RSS | 6–18 months |
-| Corridor / planning study launch | ARC News, SAM.gov | 12–24 months |
+| Corridor / planning study launch | ARC News | 12–24 months |
 | GDOT active major project | GDOT Major Projects page | Ongoing — CEI may open anytime |
-| Federal grant award | ARC News, SAM.gov | 3–12 months |
-| Active RFP posted | SAM.gov, MARTA, GPR, county portals | Immediate |
+| Federal grant award | ARC News | 3–12 months |
+| Active RFP posted | MARTA, GPR, county portals | Immediate |
 | Anticipated procurement | MARTA portal | 1–6 months |
 
 ---
@@ -195,12 +197,10 @@ The pipeline handles NLP tagging, scoring, deduplication, and stale filtering au
 ```
 rfp_signal_system/
 ├── run_pipeline.py              # Entry point — runs full pipeline
-├── .env                         # API keys (SAM_GOV_API_KEY) — auto-loaded
 ├── start_dashboard.bat          # Double-click to launch dashboard
 ├── ingestion/
 │   ├── fetcher.py               # HTTP + Playwright fetcher with anti-bot detection
 │   └── parsers/
-│       ├── sam_gov.py           # SAM.gov federal opportunities (GA + FL)
 │       ├── marta.py             # MARTA bid portal (current + anticipated)
 │       ├── arc_news.py          # ARC transportation news RSS
 │       ├── gpr.py               # Georgia Procurement Registry (all GA local gov)
@@ -224,7 +224,7 @@ rfp_signal_system/
 ├── output/
 │   └── dashboard.py             # Streamlit dashboard
 ├── tests/
-│   └── test_pipeline.py         # 51 regression tests (all offline-capable)
+│   └── test_pipeline.py         # 45 regression tests (all offline-capable)
 └── data/
     ├── db/opportunities.sqlite3  # Live opportunity database
     └── raw/                      # Cached fixtures for offline testing

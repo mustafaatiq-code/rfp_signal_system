@@ -1,0 +1,5 @@
+# Development / test dependencies.
+#   pip install -r requirements-dev.txt
+# Installs everything in requirements.txt plus the test runner.
+-r requirements.txt
+pytest>=8.0

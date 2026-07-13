@@ -14,15 +14,12 @@ tested paths — the correct action routes are unknown from the outside.
 Consequences for this module:
   * fetch_and_parse() degrades gracefully: returns [] + a log explaining the
     auth path, like gdot_solicitation.py does for the GDOT portal.
-  * FDOT projects funded via federal aid (FHWA/FTA) appear on SAM.gov and are
-    captured automatically via the sam_gov adapter.
   * The FDOT Professional Services Inquiry page (www.fdot.gov) is behind
     Cloudflare bot-protection (403) so cannot be scraped.
 
 Permitted production paths for GMG:
   * Register as a vendor on FDOT's Vendor Management system and log in to the
     PDA at pdaexternal.fdot.gov to access consultant solicitations.
-  * SAM.gov (sam_gov.py): FDOT projects with federal-aid funding publish there.
   * FDOT District offices sometimes send solicitation notices via email lists.
 """
 from __future__ import annotations
@@ -47,8 +44,6 @@ def fetch_and_parse(url: str = PORTAL_URL) -> List[dict]:
     The portal requires FDOT vendor authentication (session cookie). The
     AngularJS app immediately redirects to /Error/Forbidden when no session is
     present, rendering a "Page Error" page.
-
-    For FDOT projects with federal-aid funding, see sam_gov.fetch_and_parse().
     """
     try:
         from ingestion.fetcher import fetch_dynamic
@@ -60,8 +55,7 @@ def fetch_and_parse(url: str = PORTAL_URL) -> List[dict]:
                 "FDOT PDA portal is UP but requires FDOT vendor authentication "
                 "(app shows Page Error / Forbidden without a valid session). "
                 "Automated fetch returns no records. "
-                "GMG path: register as a vendor at %s, log in to %s. "
-                "Federal-aid FDOT opportunities are also available via SAM.gov.",
+                "GMG path: register as a vendor at %s, log in to %s.",
                 VENDOR_PAGE, PORTAL_URL,
             )
         else:
