@@ -29,7 +29,7 @@ if _env_file.exists():
 from ingestion.parsers import henry_opengov, gdot_solicitation, gdot_major_projects, sam_gov, fdot_pda, gpr, marta, boarddocs, arc_news, cobb_transportation, gwinnett_purchasing, fayette_purchasing, bidnet_direct, bartow_county, newton_county
 from nlp.tagging import tag_records
 from scoring.engine import score_all
-from storage.db import upsert_opportunities, purge_expired, fetch_all
+from storage.db import upsert_opportunities, refresh_expired_buckets, fetch_all
 
 BASE = Path(__file__).resolve().parent
 
@@ -227,9 +227,9 @@ def run(live: bool = False) -> list[dict]:
           f"{n_flagged} flagged for review (>= 0.50)")
 
     upsert_opportunities(scored)
-    removed = purge_expired()
+    removed = refresh_expired_buckets()
     if removed:
-        print(f"[storage] purged {removed} expired rows from DB")
+        print(f"[storage] reclassified {removed} past-due rows to 'Expired RFP (past due)'")
     rows = fetch_all()
     print(f"[storage] {len(rows)} rows in opportunities.sqlite3")
     return rows
