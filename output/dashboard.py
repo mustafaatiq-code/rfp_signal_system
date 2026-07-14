@@ -651,15 +651,25 @@ if due_window != "Any":
 sorted_view = view.sort_values("rfp_likelihood", ascending=False, na_position="last")
 
 above_gate = sorted_view[sorted_view["passed_gate"] == 1]
-# Below-gate expander shows only non-expired records (expired have their own filter).
+# Below-gate expander shows only non-expired records (expired have their own section).
 _below_all = (
     df[(df["passed_gate"] == 0) & ~df["bucket"].isin(_EXPIRED_BUCKETS)]
     .sort_values("rfp_likelihood", ascending=False, na_position="last")
 )
 below_gate = sorted_view[sorted_view["passed_gate"] == 0] if show_all else _below_all
 
-# When "show all" is on, merge below-gate rows at the end of the main list
-main_list = sorted_view if show_all else above_gate
+# When "show all" is on, merge below-gate rows at the end of the main list.
+# When "Hide expired" is off, also pull in expired records (any gate status)
+# so the count matches: passed-gate non-expired + ALL expired.
+if show_all:
+    main_list = sorted_view
+elif not hide_expired:
+    main_list = sorted_view[
+        (sorted_view["passed_gate"] == 1) |
+        sorted_view["bucket"].isin(_EXPIRED_BUCKETS)
+    ]
+else:
+    main_list = above_gate
 list_label = f"Ranked Opportunity List  —  {len(main_list)} records"
 if show_all and len(below_gate) > 0:
     list_label += f"  ({len(below_gate)} below gate, shown muted)"
