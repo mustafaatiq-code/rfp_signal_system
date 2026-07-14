@@ -10,11 +10,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from datetime import date
 from pathlib import Path
 
-from ingestion.parsers import henry_opengov, gdot_solicitation, gdot_major_projects, fdot_pda, gpr, marta, boarddocs, arc_news, cobb_transportation, gwinnett_purchasing, fayette_purchasing, bidnet_direct, bartow_county, newton_county
+# Load SAM_GOV_API_KEY from a gitignored .env at the project root, if present,
+# so local runs work without exporting the var manually. On hosted/scheduled
+# runs the key is provided via an environment secret instead.
+_env_file = Path(__file__).resolve().parent / ".env"
+if _env_file.exists():
+    for _line in _env_file.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
+
+from ingestion.parsers import henry_opengov, gdot_solicitation, gdot_major_projects, sam_gov, fdot_pda, gpr, marta, boarddocs, arc_news, cobb_transportation, gwinnett_purchasing, fayette_purchasing, bidnet_direct, bartow_county, newton_county
 from nlp.tagging import tag_records
 from scoring.engine import score_all
 from storage.db import upsert_opportunities, purge_expired, fetch_all
@@ -95,6 +107,13 @@ SOURCES = [
         # Lists active major GDOT construction/design projects (CEI, A&E signals).
         # Each record links to its ArcGIS Hub project page for full details.
         "live_parser": gdot_major_projects.fetch_and_parse,
+    },
+    {
+        "name": "sam_gov",
+        # SAM.gov federal transportation opportunities (GA + FL).
+        # Requires SAM_GOV_API_KEY env var (free tier, 10 req/day). Returns []
+        # with a log when the key is absent, so the pipeline never breaks.
+        "live_parser": sam_gov.fetch_and_parse,
     },
     {
         "name": "fdot_pda",

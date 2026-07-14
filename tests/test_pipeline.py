@@ -29,7 +29,7 @@ sys.path.insert(0, str(BASE))
 
 from ingestion.parsers import fulton_schools as fs  # noqa: E402
 from ingestion.parsers import henry_opengov as henry  # noqa: E402
-from ingestion.parsers import fdot_pda, gpr, marta, arc_news, boarddocs  # noqa: E402
+from ingestion.parsers import sam_gov, fdot_pda, gpr, marta, arc_news, boarddocs  # noqa: E402
 from ingestion.parsers import gdot_major_projects  # noqa: E402
 from ingestion.parsers import bartow_county, newton_county  # noqa: E402
 from ingestion.fetcher import looks_like_antibot  # noqa: E402
@@ -131,6 +131,119 @@ def test_henry_parser_returns_empty_on_shell_or_challenge():
     # an anti-bot / empty SPA shell carries no listing markup -> no records
     assert henry.parse_html("<title>Just a moment...</title>") == []
     assert henry.parse_html("<html><body></body></html>") == []
+
+
+# --- SAM.gov adapter ----------------------------------------------------------
+
+# SYNTHETIC SAM.gov v2 API response shape (not real data).
+_SYNTHETIC_SAM_RESPONSE = {
+    "totalRecords": 2,
+    "opportunitiesData": [
+        {
+            "noticeId": "abc123",
+            "title": "CEI Services for SR-316 Widening Project",
+            "baseType": "o",
+            "active": "Yes",
+            "responseDeadLine": "2026-09-15T12:00:00",
+            "postedDate": "2026-06-20T00:00:00",
+            "naicsCode": "541330",
+            "organizationName": "Georgia DOT",
+            "fullParentPathName": "DEPT OF TRANSPORTATION|GEORGIA DOT",
+            "placeOfPerformanceState": "Georgia",
+            "uiLink": "https://sam.gov/opp/abc123/view",
+        },
+        {
+            "noticeId": "xyz789",
+            "title": "Traffic Operations Program Support Services",
+            "baseType": "p",  # pre-solicitation
+            "active": "Yes",
+            "responseDeadLine": "",
+            "postedDate": "2026-06-18T00:00:00",
+            "naicsCode": "541690",
+            "organizationName": "Florida DOT District 3",
+            "fullParentPathName": "DEPT OF TRANSPORTATION|FDOT D3",
+            "placeOfPerformanceState": "Florida",
+            "uiLink": "https://sam.gov/opp/xyz789/view",
+        },
+    ],
+}
+
+
+def test_sam_gov_parse_response_structure():
+    # Without a whitelist, all records pass through (used in unit tests).
+    recs = sam_gov._parse_response(_SYNTHETIC_SAM_RESPONSE)
+    assert len(recs) == 2
+
+    cei = recs[0]
+    assert "CEI Services" in cei["title"]
+    assert cei["solicitation_id"] == "abc123"
+    assert cei["bucket"] == "1 - Active RFP"
+    assert cei["year"] == 2026
+    assert "Due date: 2026-09-15" in cei["status_line"]
+    assert cei["agency"] == "Georgia DOT"
+    assert cei["source_url"] == "https://sam.gov/opp/abc123/view"
+
+    traf = recs[1]
+    assert "Traffic Operations" in traf["title"]
+    assert traf["bucket"] == "2 - Predicted"  # baseType="p" -> pre-solicitation
+    assert traf["solicitation_id"] == "xyz789"
+
+
+def test_sam_gov_strict_naics_drops_no_naics_records():
+    """Records with no naicsCode must be excluded when a whitelist is active."""
+    data = {
+        "totalRecords": 2,
+        "opportunitiesData": [
+            # Has a matching NAICS — should pass
+            {**_SYNTHETIC_SAM_RESPONSE["opportunitiesData"][0]},
+            # No NAICS at all — must be dropped (embassy/military junk pattern)
+            {**_SYNTHETIC_SAM_RESPONSE["opportunitiesData"][1], "naicsCode": ""},
+        ],
+    }
+    recs = sam_gov._parse_response(data, naics_whitelist=sam_gov.TARGET_NAICS)
+    assert len(recs) == 1
+    assert "CEI Services" in recs[0]["title"]
+
+
+def test_sam_gov_state_filter_drops_overseas():
+    """Overseas records must be excluded when a state_whitelist is active."""
+    overseas = {
+        **_SYNTHETIC_SAM_RESPONSE["opportunitiesData"][0],
+        "naicsCode": "541330",
+        "placeOfPerformance": {
+            "state": {"code": "", "name": ""},
+            "country": {"code": "HND", "name": "Honduras"},
+        },
+    }
+    data = {"totalRecords": 1, "opportunitiesData": [overseas]}
+    recs = sam_gov._parse_response(data, naics_whitelist=sam_gov.TARGET_NAICS,
+                                   state_whitelist={"GA"})
+    assert recs == []
+
+
+def test_sam_gov_deduplicates_across_keywords():
+    # Two identical notice IDs from different keyword runs should collapse to one.
+    dupe = dict(_SYNTHETIC_SAM_RESPONSE)
+    seen: set = set()
+    records = []
+    for rec in sam_gov._parse_response(dupe):
+        if rec["solicitation_id"] not in seen:
+            seen.add(rec["solicitation_id"])
+            records.append(rec)
+    # fetch_and_parse() does this dedup — verify the building block works
+    assert len(records) == 2
+    records2 = []
+    for rec in sam_gov._parse_response(dupe):  # second pass (same IDs)
+        if rec["solicitation_id"] not in seen:
+            seen.add(rec["solicitation_id"])
+            records2.append(rec)
+    assert len(records2) == 0  # dupes suppressed
+
+
+def test_sam_gov_no_key_returns_empty(monkeypatch):
+    monkeypatch.delenv("SAM_GOV_API_KEY", raising=False)
+    result = sam_gov.fetch_and_parse(api_key=None)
+    assert result == []
 
 
 # --- FDOT PDA and GPR (both auth/IP-gated) ------------------------------------
@@ -339,6 +452,14 @@ def test_boarddocs_parser_extracts_transport_meetings():
 def test_boarddocs_detects_ip_block_shell():
     assert boarddocs._is_shell(_BOARDDOCS_SHELL) is True
     assert boarddocs._is_shell(_SYNTHETIC_BOARDDOCS_HTML) is False
+
+
+def test_sam_gov_cei_scored_as_transport():
+    recs = sam_gov._parse_response(_SYNTHETIC_SAM_RESPONSE)
+    scored = score_all(tag_records(recs))
+    cei = next(o for o in scored if "CEI" in o.record["title"])
+    assert cei.passed_gate is True
+    assert cei.rfp_likelihood >= 0.5
 
 
 # --- Cobb County Transportation adapter ---------------------------------------

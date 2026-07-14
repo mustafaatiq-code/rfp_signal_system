@@ -28,13 +28,27 @@ To also run the test suite, install the dev extras instead:
 pip install -r requirements-dev.txt
 ```
 
-### 2. Run the pipeline
+### 2. API key (SAM.gov)
+
+The SAM.gov federal source needs a free API key. Copy the template and add
+your own key (register at [sam.gov/profile/details](https://sam.gov/profile/details) —
+free tier = 10 req/day):
+
+```bash
+cp .env.example .env
+# edit .env and set SAM_GOV_API_KEY=your-key-here
+```
+
+`.env` is gitignored and must never be committed. Without a key, the SAM.gov
+source simply returns no records and the rest of the pipeline runs normally.
+
+### 3. Run the pipeline
 
 ```bash
 python run_pipeline.py --live
 ```
 
-### 3. Launch the dashboard
+### 4. Launch the dashboard
 
 Double-click `start_dashboard.bat` **or** run:
 
@@ -44,13 +58,13 @@ python -m streamlit run output/dashboard.py
 
 Dashboard opens at **http://localhost:8501** — keep the terminal window open while using it.
 
-### 4. Run tests
+### 5. Run tests
 
 ```bash
 python -m pytest tests/
 ```
 
-All 45 tests are offline-capable (no API key or network required).
+All 51 tests are offline-capable (no API key or network required).
 
 ### Deploying for GMG
 
@@ -69,6 +83,7 @@ data-refresh workflow), see **[DEPLOY.md](DEPLOY.md)**.
 | **Cobb County Transportation** | `cobb_transportation.py` | 7 | Dedicated transportation bids (sidewalk, signal, transit) |
 | **Fayette County Purchasing** | `fayette_purchasing.py` | ~15 | County bids filtered for transportation keywords |
 | **Gwinnett County Purchasing** | `gwinnett_purchasing.py` | 4 | County bids filtered for transportation keywords |
+| **SAM.gov (federal)** | `sam_gov.py` | 4 | Federal transportation opportunities in GA + FL (needs API key) |
 | **BidNet Direct** | `bidnet_direct.py` | 3 | Cherokee, Douglas, Fulton, Clayton, Henry counties |
 | **ARC transportation news** | `arc_news.py` | 5 | TIP amendments, corridor studies, SPLOST votes (early signals) |
 | **Bartow County** | `bartow_county.py` | 1 | County project bids (MPO, Transit dept) |
@@ -173,10 +188,10 @@ The system detects upstream signals that typically precede an RFP by 6–24 mont
 |---|---|---|
 | SPLOST / TSPLOST referendum | BoardDocs, ARC News | 12–24 months |
 | TIP Amendment adoption | ARC News RSS | 6–18 months |
-| Corridor / planning study launch | ARC News | 12–24 months |
+| Corridor / planning study launch | ARC News, SAM.gov | 12–24 months |
 | GDOT active major project | GDOT Major Projects page | Ongoing — CEI may open anytime |
-| Federal grant award | ARC News | 3–12 months |
-| Active RFP posted | MARTA, GPR, county portals | Immediate |
+| Federal grant award | ARC News, SAM.gov | 3–12 months |
+| Active RFP posted | SAM.gov, MARTA, GPR, county portals | Immediate |
 | Anticipated procurement | MARTA portal | 1–6 months |
 
 ---
@@ -201,6 +216,7 @@ rfp_signal_system/
 ├── ingestion/
 │   ├── fetcher.py               # HTTP + Playwright fetcher with anti-bot detection
 │   └── parsers/
+│       ├── sam_gov.py           # SAM.gov federal opportunities (GA + FL)
 │       ├── marta.py             # MARTA bid portal (current + anticipated)
 │       ├── arc_news.py          # ARC transportation news RSS
 │       ├── gpr.py               # Georgia Procurement Registry (all GA local gov)
