@@ -102,7 +102,20 @@ h2 a, h3 a { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Sidebar: action guide ─────────────────────────────────────────────────────
+# ── Filter state (initialized before sidebar so sidebar widgets can use _fk) ──
+if "filter_reset" not in st.session_state:
+    st.session_state.filter_reset = 0
+_fk = st.session_state.filter_reset
+
+_pf_defaults = {"_pf_keyword": "", "_pf_bucket": "All", "_pf_agency": "All",
+                "_pf_worktype": "All", "_pf_due": "Any", "_pf_score": 0.0,
+                "_pf_hide_exp": True, "_pf_flagged": False, "_pf_show_all": False,
+                "_pf_urgent": False}
+for k, v in _pf_defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+# ── Sidebar: action guide + display filters ───────────────────────────────────
 with st.sidebar:
     st.markdown("**Action Guide**")
 
@@ -111,6 +124,9 @@ with st.sidebar:
 
     st.markdown("🟡 **2 - Predicted**")
     st.caption("Early signal — project is live but no RFP yet. Add to watchlist, prepare qualifications, contact agency to signal interest.")
+
+    st.markdown("⚠️ **Construction contract (indicator)**")
+    st.caption("Direct construction bid — not a GMG service. Signals that a CEI, inspection, or A&E design contract will follow. Monitor the agency for the follow-on RFP.")
 
     st.markdown("⚫ **Expired RFP / Awarded / Cancelled**")
     st.caption("Opportunity closed. Note who won; follow up for re-solicitation or subcontracting opportunities.")
@@ -140,6 +156,22 @@ with st.sidebar:
 
     st.markdown("**Pipeline Stage** (15%)")
     st.caption("Active RFP→1.00 · Predicted→0.50 · Unknown→0.30 · Expired/Closed→0.00")
+
+    st.divider()
+    st.markdown("**Display Filters**")
+    hide_expired = st.checkbox("Hide expired & closed", value=st.session_state["_pf_hide_exp"], key=f"he_{_fk}")
+    st.session_state["_pf_hide_exp"] = hide_expired
+    show_flagged = st.checkbox("High priority only (score ≥ 0.50)", value=st.session_state["_pf_flagged"], key=f"fl_{_fk}")
+    st.session_state["_pf_flagged"] = show_flagged
+    show_all = st.checkbox("Show all signals (incl. below-gate)", value=st.session_state["_pf_show_all"], key=f"sa_{_fk}")
+    st.session_state["_pf_show_all"] = show_all
+    urgent_only = st.checkbox("🚨 Urgent only (≤ 7 days)", value=st.session_state["_pf_urgent"], key=f"urg_{_fk}")
+    st.session_state["_pf_urgent"] = urgent_only
+    if st.button("Clear all filters", use_container_width=True):
+        for k, v in _pf_defaults.items():
+            st.session_state[k] = v
+        st.session_state.filter_reset += 1
+        st.rerun()
 
     st.divider()
     if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
@@ -200,10 +232,22 @@ if "selected_id" not in st.session_state:
 # ── Compute "Next Step" for every row ─────────────────────────────────────────
 today = date.today()
 
+# Work types that are direct construction contracts (not GMG's professional
+# services). These are valuable pipeline signals — a paving or bridge contract
+# means CEI/inspection/design work will follow — but GMG cannot bid on them
+# directly. The next_step labels reflect this distinction.
+_INDICATOR_WORK_TYPES = {
+    "Road Resurfacing", "Road Widening", "Road Reconstruction",
+    "Bridge Replacement", "Bridge Repair", "Bridge / Culvert",
+    "Grading / Earthwork", "Road Paving", "Pavement Marking",
+}
+
+
 def next_step(row) -> str:
     bucket = str(row.get("bucket", ""))
     passed = row.get("passed_gate", 0)
     due_raw = row.get("due_date")
+    wt = str(row.get("work_type", ""))
 
     # Parse due date
     due: date | None = None
@@ -212,6 +256,14 @@ def next_step(row) -> str:
             due = datetime.strptime(str(due_raw)[:10], "%Y-%m-%d").date()
         except ValueError:
             pass
+
+    # Construction contracts: GMG can't bid directly but they signal follow-on work
+    if wt in _INDICATOR_WORK_TYPES and passed:
+        if "Active RFP" in bucket and due and (due - today).days > 0:
+            return f"⚠️ Construction contract (indicator) — watch for CEI/A&E RFP (closes {due})"
+        if "Active RFP" in bucket:
+            return "⚠️ Construction contract (indicator) — watch for related CEI/inspection RFP"
+        return "⚠️ Construction signal — monitor for follow-on CEI/A&E/inspection RFP"
 
     if "Active RFP" in bucket:
         if due:
@@ -462,21 +514,7 @@ b2.metric("🟡 Predicted", _n_pred)
 b3.metric("✅ Passed Relevance Gate", _n_passed_live)
 b4.metric("⚪ Below Relevance Gate", _n_below_live)
 
-# ── Filters (always visible) ──────────────────────────────────────────────────
-if "filter_reset" not in st.session_state:
-    st.session_state.filter_reset = 0
-_fk = st.session_state.filter_reset
-
-# Persistent filter defaults that survive detail-view navigation (widget keys
-# are cleared when widgets aren't rendered, but these _pf_* keys are not).
-_pf_defaults = {"_pf_keyword": "", "_pf_bucket": "All", "_pf_agency": "All",
-                "_pf_worktype": "All", "_pf_due": "Any", "_pf_score": 0.0,
-                "_pf_hide_exp": True, "_pf_flagged": False, "_pf_show_all": False,
-                "_pf_urgent": False}
-for k, v in _pf_defaults.items():
-    if k not in st.session_state:
-        st.session_state[k] = v
-
+# ── Filters (one row — display filters are in the sidebar) ────────────────────
 def _sel_idx(opts, saved):
     try:
         return opts.index(saved)
@@ -515,28 +553,6 @@ with f5:
 with f6:
     min_score = st.slider("Min Score", 0.0, 1.0, st.session_state["_pf_score"], 0.05, key=f"ms_{_fk}")
     st.session_state["_pf_score"] = min_score
-
-cb1, cb2, cb3, cb4, clr = st.columns([1.5, 1.8, 1.8, 1.5, 1.5])
-with cb1:
-    hide_expired = st.checkbox("Hide expired & closed", value=st.session_state["_pf_hide_exp"], key=f"he_{_fk}")
-    st.session_state["_pf_hide_exp"] = hide_expired
-with cb2:
-    show_flagged = st.checkbox("High priority only (score ≥ 0.50)", value=st.session_state["_pf_flagged"], key=f"fl_{_fk}")
-    st.session_state["_pf_flagged"] = show_flagged
-with cb3:
-    show_all = st.checkbox("Show all signals (incl. below-gate)", value=st.session_state["_pf_show_all"], key=f"sa_{_fk}")
-    st.session_state["_pf_show_all"] = show_all
-with cb4:
-    urgent_only = st.checkbox("🚨 Urgent only (≤7 days)", value=st.session_state["_pf_urgent"], key=f"urg_{_fk}")
-    st.session_state["_pf_urgent"] = urgent_only
-with clr:
-    st.markdown("<div style='margin-top:4px'>", unsafe_allow_html=True)
-    if st.button("Clear filters", use_container_width=True):
-        for k, v in _pf_defaults.items():
-            st.session_state[k] = v
-        st.session_state.filter_reset += 1
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
 
 view = df.copy()
 if keyword.strip():
