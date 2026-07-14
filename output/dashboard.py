@@ -64,6 +64,60 @@ def _work_type(title: str, status_line: str = "") -> str:
 st.set_page_config(page_title="GMG Opportunity Signal Radar", layout="wide",
                    initial_sidebar_state="expanded")
 
+
+def _secret(key: str, default: str = "") -> str:
+    """Read a Streamlit secret, tolerating a missing secrets file/key.
+
+    Returns `default` when no secrets.toml exists or the key is absent — so the
+    app runs with zero configuration in local development.
+    """
+    try:
+        return str(st.secrets[key])
+    except Exception:
+        return default
+
+
+def _is_deployed() -> bool:
+    """True when running as a hosted (read-only) deployment, e.g. Streamlit Cloud.
+
+    Set `deployed = "true"` in the app's Secrets to enable. Controls whether
+    local-only affordances (the live-pipeline Refresh button) are shown.
+    """
+    return _secret("deployed", "").strip().lower() in ("1", "true", "yes")
+
+
+def _check_password() -> bool:
+    """Gate the dashboard behind a password when one is configured.
+
+    On Streamlit Community Cloud, set the password in the app's Secrets:
+        dashboard_password = "your-shared-password"
+    When no password secret is set (typical local dev), the gate is disabled so
+    `streamlit run` works with no setup.
+    """
+    import hmac
+
+    expected = _secret("dashboard_password")
+    if not expected:
+        return True  # no password configured → open (local dev)
+    if st.session_state.get("auth_ok"):
+        return True
+
+    st.markdown("### 🔒 GMG Opportunity Signal Radar")
+    st.caption("Enter the shared password to continue.")
+    with st.form("login"):
+        pw = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Enter")
+    if submitted:
+        if hmac.compare_digest(pw, expected):
+            st.session_state["auth_ok"] = True
+            st.rerun()
+        st.error("Incorrect password.")
+    return False
+
+
+if not _check_password():
+    st.stop()
+
 st.markdown("""
 <style>
 /* Remove Streamlit's default top padding */
@@ -173,21 +227,22 @@ with st.sidebar:
         st.session_state.filter_reset += 1
         st.rerun()
 
-    st.divider()
-    if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
-        import subprocess, sys
-        with st.spinner("Running pipeline — this takes ~60 seconds…"):
-            result = subprocess.run(
-                [sys.executable, "run_pipeline.py", "--live"],
-                cwd=str(Path(__file__).resolve().parent.parent),
-                capture_output=True, text=True, timeout=300,
-            )
-        if result.returncode == 0:
-            st.success("Pipeline complete — data refreshed!")
-        else:
-            st.error("Pipeline error — check terminal for details.")
-            st.code(result.stderr[-1000:] if result.stderr else "no output")
-        st.rerun()
+    if not _is_deployed():
+        st.divider()
+        if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
+            import subprocess, sys
+            with st.spinner("Running pipeline — this takes ~60 seconds…"):
+                result = subprocess.run(
+                    [sys.executable, "run_pipeline.py", "--live"],
+                    cwd=str(Path(__file__).resolve().parent.parent),
+                    capture_output=True, text=True, timeout=300,
+                )
+            if result.returncode == 0:
+                st.success("Pipeline complete — data refreshed!")
+            else:
+                st.error("Pipeline error — check terminal for details.")
+                st.code(result.stderr[-1000:] if result.stderr else "no output")
+            st.rerun()
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 st.markdown("## Opportunity Signal Radar")

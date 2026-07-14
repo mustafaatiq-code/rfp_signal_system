@@ -21,9 +21,6 @@ Permitted production paths for GMG:
     CEI / traffic-ops / planning / program-management space operating in
     Georgia should do this anyway.  Once approved, the portal is used
     interactively at solicitation.dot.ga.gov (login with Microsoft account).
-  * sam_gov.py (this same pipeline): GDOT projects funded via FHWA federal-aid
-    money are published as federal contract opportunities on SAM.gov and flow
-    into the pipeline automatically through that adapter.
 """
 from __future__ import annotations
 
@@ -56,9 +53,6 @@ def fetch_and_parse(url: str = PORTAL_URL) -> List[dict]:
     will always return [] in an automated context.  It logs a clear explanation
     and a health-check status so the pipeline knows the source is structurally
     reachable (just gated), not broken.
-
-    For federal-aid GDOT projects, see sam_gov.fetch_and_parse() — that source
-    covers a significant subset of GDOT transportation solicitations automatically.
     """
     from ingestion.fetcher import fetch_static
     result = fetch_static(url, retries=1)
@@ -77,8 +71,7 @@ def fetch_and_parse(url: str = PORTAL_URL) -> List[dict]:
             "(Microsoft Identity / GDOT consultant prequalification). "
             "Automated fetch returns no records. "
             "GMG path: register as a prequalified GDOT consultant at %s, "
-            "then access the portal interactively at %s. "
-            "Federal-aid GDOT opportunities are available via SAM.gov.",
+            "then access the portal interactively at %s.",
             CONSULTANT_PAGE, PORTAL_URL,
         )
     else:

@@ -22,7 +22,7 @@ from typing import List, Optional
 SERVICE_TYPE_KEYWORDS = {
     "Construction Engineering & Inspection": [
         "cei", "construction engineering and inspection",
-        "construction engineering inspection",   # without "and" (SAM.gov style)
+        "construction engineering inspection",   # without "and"
         "construction inspection", "resident engineer",
         "field inspection", "inspection services", "subsurface utility",
         "sidewalk", "pedestrian improvement", "pedestrian project",

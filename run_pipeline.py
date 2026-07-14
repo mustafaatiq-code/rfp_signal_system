@@ -15,7 +15,9 @@ import re
 from datetime import date
 from pathlib import Path
 
-# Load .env from project root so SAM_GOV_API_KEY etc. survive session restarts
+# Load SAM_GOV_API_KEY from a gitignored .env at the project root, if present,
+# so local runs work without exporting the var manually. On hosted/scheduled
+# runs the key is provided via an environment secret instead.
 _env_file = Path(__file__).resolve().parent / ".env"
 if _env_file.exists():
     for _line in _env_file.read_text().splitlines():
@@ -96,8 +98,7 @@ SOURCES = [
         "name": "gdot_solicitation",
         # GDOT's Professional Services portal — requires Microsoft Identity
         # (prequalified-consultant) login. fetch_and_parse() returns [] with a
-        # log explaining the auth path. Federal-aid GDOT projects flow in via
-        # the sam_gov source below.
+        # log explaining the auth path.
         "live_parser": gdot_solicitation.fetch_and_parse,
     },
     {
@@ -110,15 +111,15 @@ SOURCES = [
     {
         "name": "sam_gov",
         # SAM.gov federal transportation opportunities (GA + FL).
-        # Requires SAM_GOV_API_KEY env var (free, 10 req/day).
-        # Uses 2 keywords x 2 states = 4 requests per run.
+        # Requires SAM_GOV_API_KEY env var (free tier, 10 req/day). Returns []
+        # with a log when the key is absent, so the pipeline never breaks.
         "live_parser": sam_gov.fetch_and_parse,
     },
     {
         "name": "fdot_pda",
         # FDOT Procurement Development Application — requires FDOT vendor
         # authentication (redirects to /Error/Forbidden without session).
-        # Degrades gracefully. Federal-aid FDOT projects flow via sam_gov.
+        # Degrades gracefully (returns [] when not authenticated).
         "live_parser": fdot_pda.fetch_and_parse,
     },
     {

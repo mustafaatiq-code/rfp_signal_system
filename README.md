@@ -18,17 +18,29 @@ Data Sources → Ingestion → NLP Tagging → Scoring → SQLite DB → Dashboa
 ### 1. Install dependencies
 
 ```bash
-pip install requests playwright python-dateutil streamlit beautifulsoup4
-playwright install chromium
+pip install -r requirements.txt
+playwright install chromium          # one-time browser download for JS sources
 ```
 
-### 2. API key (already saved)
+To also run the test suite, install the dev extras instead:
 
-The SAM.gov API key is stored in `.env` at the project root and loaded automatically. No action needed. To regenerate: register free at [sam.gov/profile/details](https://sam.gov/profile/details) (free tier = 10 req/day), then update `.env`:
+```bash
+pip install -r requirements-dev.txt
+```
 
+### 2. API key (SAM.gov)
+
+The SAM.gov federal source needs a free API key. Copy the template and add
+your own key (register at [sam.gov/profile/details](https://sam.gov/profile/details) —
+free tier = 10 req/day):
+
+```bash
+cp .env.example .env
+# edit .env and set SAM_GOV_API_KEY=your-key-here
 ```
-SAM_GOV_API_KEY=your-key-here
-```
+
+`.env` is gitignored and must never be committed. Without a key, the SAM.gov
+source simply returns no records and the rest of the pipeline runs normally.
 
 ### 3. Run the pipeline
 
@@ -54,6 +66,11 @@ python -m pytest tests/
 
 All 51 tests are offline-capable (no API key or network required).
 
+### Deploying for GMG
+
+To host the dashboard on Streamlit Community Cloud (password-gated, with a
+data-refresh workflow), see **[DEPLOY.md](DEPLOY.md)**.
+
 ---
 
 ## Active Data Sources
@@ -66,7 +83,7 @@ All 51 tests are offline-capable (no API key or network required).
 | **Cobb County Transportation** | `cobb_transportation.py` | 7 | Dedicated transportation bids (sidewalk, signal, transit) |
 | **Fayette County Purchasing** | `fayette_purchasing.py` | ~15 | County bids filtered for transportation keywords |
 | **Gwinnett County Purchasing** | `gwinnett_purchasing.py` | 4 | County bids filtered for transportation keywords |
-| **SAM.gov (federal)** | `sam_gov.py` | 4 | Federal transportation opportunities in GA + FL |
+| **SAM.gov (federal)** | `sam_gov.py` | 4 | Federal transportation opportunities in GA + FL (needs API key) |
 | **BidNet Direct** | `bidnet_direct.py` | 3 | Cherokee, Douglas, Fulton, Clayton, Henry counties |
 | **ARC transportation news** | `arc_news.py` | 5 | TIP amendments, corridor studies, SPLOST votes (early signals) |
 | **Bartow County** | `bartow_county.py` | 1 | County project bids (MPO, Transit dept) |
@@ -195,7 +212,6 @@ The pipeline handles NLP tagging, scoring, deduplication, and stale filtering au
 ```
 rfp_signal_system/
 ├── run_pipeline.py              # Entry point — runs full pipeline
-├── .env                         # API keys (SAM_GOV_API_KEY) — auto-loaded
 ├── start_dashboard.bat          # Double-click to launch dashboard
 ├── ingestion/
 │   ├── fetcher.py               # HTTP + Playwright fetcher with anti-bot detection
@@ -224,7 +240,7 @@ rfp_signal_system/
 ├── output/
 │   └── dashboard.py             # Streamlit dashboard
 ├── tests/
-│   └── test_pipeline.py         # 51 regression tests (all offline-capable)
+│   └── test_pipeline.py         # 45 regression tests (all offline-capable)
 └── data/
     ├── db/opportunities.sqlite3  # Live opportunity database
     └── raw/                      # Cached fixtures for offline testing
