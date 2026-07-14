@@ -323,8 +323,10 @@ def next_step(row) -> str:
     if "Active RFP" in bucket:
         if due:
             days = (due - today).days
-            if days <= 0:
+            if days < 0:
                 return "⚫ Expired — track re-solicitation"
+            elif days == 0:
+                return f"🔴 URGENT — due TODAY ({due})"
             elif days <= 7:
                 return f"🔴 URGENT — submit in {days}d (due {due})"
             elif days <= 21:
