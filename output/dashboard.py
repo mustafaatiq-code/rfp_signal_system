@@ -340,17 +340,10 @@ _INDICATOR_WORK_TYPES = {
 
 
 def _fmt_signal_types(r: dict) -> str:
-    import json as _json
-    raw = r.get("signal_types") or "—"
-    try:
-        if isinstance(raw, list):
-            signals = raw
-        elif isinstance(raw, str) and raw.startswith("["):
-            signals = _json.loads(raw)
-        else:
-            return str(raw)
-    except Exception:
-        return str(raw)
+    raw = r.get("signal_types") or ""
+    if not raw or raw == "—":
+        return "—"
+    signals = [s.strip() for s in str(raw).split(",") if s.strip()]
     bucket = str(r.get("bucket", ""))
     if "Predicted" in bucket:
         signals = ["Anticipated RFP" if s == "Active RFP" else s for s in signals]
