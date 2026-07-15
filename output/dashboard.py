@@ -339,6 +339,19 @@ _INDICATOR_WORK_TYPES = {
 }
 
 
+def _fmt_signal_types(r: dict) -> str:
+    import json as _json
+    raw = r.get("signal_types") or "—"
+    try:
+        signals = _json.loads(raw) if isinstance(raw, str) and raw.startswith("[") else list(raw)
+    except Exception:
+        return str(raw)
+    bucket = str(r.get("bucket", ""))
+    if "Predicted" in bucket:
+        signals = [s for s in signals if s != "Active RFP"]
+    return ", ".join(signals) if signals else "—"
+
+
 def next_step(row) -> str:
     bucket = str(row.get("bucket", ""))
     passed = row.get("passed_gate", 0)
@@ -439,7 +452,7 @@ if st.session_state.selected_id is not None:
         ]
         right_fields = [
             ("Service Types",  str(r.get("service_types") or "—")),
-            ("Signal Types",   str(r.get("signal_types") or "—")),
+            ("Signal Types",   _fmt_signal_types(r)),
             ("Relevance Gate", gate_str),
             ("Year",           str(r.get("year") or "—")),
             ("Status / Notes", status_note),
