@@ -622,7 +622,7 @@ with f1:
                              placeholder="keyword…", key=f"kw_{_fk}")
     st.session_state["_pf_keyword"] = keyword
 with f2:
-    bucket_opts = ["All"] + sorted(df["bucket"].dropna().unique().tolist())
+    bucket_opts = ["All", "All Expired / Closed"] + sorted(df["bucket"].dropna().unique().tolist())
     bucket_filter = st.selectbox("Bucket", bucket_opts,
                                   index=_sel_idx(bucket_opts, st.session_state["_pf_bucket"]),
                                   key=f"bkt_{_fk}")
@@ -653,7 +653,9 @@ view = df.copy()
 if keyword.strip():
     kw = keyword.strip().lower()
     view = view[view["title"].str.lower().str.contains(kw, na=False)]
-if bucket_filter != "All":
+if bucket_filter == "All Expired / Closed":
+    view = view[view["bucket"].isin(_EXPIRED_BUCKETS)]
+elif bucket_filter != "All":
     view = view[view["bucket"] == bucket_filter]
 if agency_filter != "All":
     view = view[view["agency"] == agency_filter]
@@ -665,7 +667,7 @@ if show_flagged:
     view = view[view["flagged_for_review"] == 1]
 if urgent_only:
     view = view[view["next_step"].str.contains("URGENT", na=False)]
-if hide_expired and bucket_filter not in _EXPIRED_BUCKETS:
+if hide_expired and bucket_filter not in _EXPIRED_BUCKETS and bucket_filter != "All Expired / Closed":
     view = view[~view["bucket"].isin(_EXPIRED_BUCKETS)]
 if due_window != "Any":
     def _due_date_obj(val):
