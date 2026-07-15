@@ -227,8 +227,26 @@ with st.sidebar:
         st.session_state.filter_reset += 1
         st.rerun()
 
-    if not _is_deployed():
-        st.divider()
+    st.divider()
+    if _is_deployed():
+        if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
+            import requests as _req
+            token = _secret("github_token")
+            if not token:
+                st.error("GitHub token not configured — add `github_token` to Streamlit secrets.")
+            else:
+                resp = _req.post(
+                    "https://api.github.com/repos/mustafaatiq-code/rfp_signal_system"
+                    "/actions/workflows/refresh-data.yml/dispatches",
+                    headers={"Authorization": f"token {token}", "Accept": "application/vnd.github+json"},
+                    json={"ref": "main"},
+                )
+                if resp.status_code == 204:
+                    st.success("Pipeline triggered — data will refresh in ~2 minutes and the page will update automatically.")
+                else:
+                    st.error(f"Failed to trigger pipeline ({resp.status_code}). Check the github_token secret.")
+        st.caption("🕐 Also refreshes automatically every day at 6 AM ET.")
+    else:
         if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
             import subprocess, sys
             with st.spinner("Running pipeline — this takes ~60 seconds…"):
