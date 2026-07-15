@@ -262,9 +262,9 @@ with st.sidebar:
 
             if completed and run_after_trigger:
                 del st.session_state["_refresh_triggered_at"]
-                st.rerun()
+                st.success("✅ Data refreshed! Reload the page to see the latest results.")
             else:
-                st.info("⏳ Pipeline running — page will refresh automatically when done…")
+                st.info("⏳ Pipeline running — check back in ~2 minutes and reload the page.")
                 _time.sleep(10)
                 st.rerun()
 
