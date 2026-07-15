@@ -264,7 +264,7 @@ with st.sidebar:
                 del st.session_state["_refresh_triggered_at"]
                 st.success("✅ Data refreshed! Reload the page to see the latest results.")
             else:
-                st.info("⏳ Pipeline running — check back in ~2 minutes and reload the page.")
+                st.info("⏳ Pipeline running — check back in ~2 minutes, reload the page, and re-enter the password to see the latest data.")
                 _time.sleep(10)
                 st.rerun()
 
