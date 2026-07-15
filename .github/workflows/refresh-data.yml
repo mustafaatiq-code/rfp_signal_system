@@ -1,0 +1,60 @@
+name: Refresh Data
+
+# Runs the live pipeline on a schedule and publishes a fresh database snapshot
+# to `main`. Streamlit Community Cloud auto-redeploys on the push, so the hosted
+# dashboard picks up new data with no manual steps.
+#
+# Also runnable on demand from the Actions tab (workflow_dispatch).
+#
+# Optional secret: SAM_GOV_API_KEY (Settings → Secrets → Actions). Without it,
+# the SAM.gov source returns nothing and the rest of the pipeline runs normally.
+
+on:
+  schedule:
+    - cron: "0 11 * * *"   # daily at 11:00 UTC (~6-7am US Eastern)
+  workflow_dispatch: {}
+
+# Never run two refreshes at once (avoids racing pushes to main).
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+# The job commits the refreshed snapshot back to the repo.
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run pipeline (live)
+        env:
+          SAM_GOV_API_KEY: ${{ secrets.SAM_GOV_API_KEY }}
+        run: python run_pipeline.py --live
+
+      - name: Publish snapshot if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # The DB is gitignored, so force-add it as a deliberate published snapshot.
+          git add -f data/db/opportunities.sqlite3
+          if git diff --cached --quiet; then
+            echo "No data changes — nothing to publish."
+          else
+            git commit -m "Auto-refresh data snapshot ($(date -u +%Y-%m-%d))"
+            git push
+          fi
