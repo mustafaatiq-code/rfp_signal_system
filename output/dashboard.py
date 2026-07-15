@@ -343,7 +343,12 @@ def _fmt_signal_types(r: dict) -> str:
     import json as _json
     raw = r.get("signal_types") or "—"
     try:
-        signals = _json.loads(raw) if isinstance(raw, str) and raw.startswith("[") else list(raw)
+        if isinstance(raw, list):
+            signals = raw
+        elif isinstance(raw, str) and raw.startswith("["):
+            signals = _json.loads(raw)
+        else:
+            return str(raw)
     except Exception:
         return str(raw)
     bucket = str(r.get("bucket", ""))
