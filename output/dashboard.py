@@ -355,7 +355,7 @@ def next_step(row) -> str:
 
     # Construction contracts: GMG can't bid directly but they signal follow-on work
     if wt in _INDICATOR_WORK_TYPES and passed:
-        if bucket in _EXPIRED_BUCKETS or (due and (due - today).days < 0):
+        if bucket in {"Expired RFP (past due)", "Awarded", "Cancelled"} or (due and (due - today).days < 0):
             return "⚫ Expired — construction contract closed; watch for follow-on CEI/A&E solicitation"
         if "Active RFP" in bucket and due and (due - today).days > 0:
             return f"⚠️ Construction contract (indicator) — watch for CEI/A&E RFP (closes {due})"
