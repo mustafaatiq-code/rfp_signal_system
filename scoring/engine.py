@@ -202,8 +202,11 @@ def relevance_gate(tagged: TaggedRecord, est_budget: Optional[float],
     return True, "PASS"
 
 
-def _signal_count_norm(tagged: TaggedRecord, max_signals: int = 4) -> float:
-    return min(len(tagged.signal_types), max_signals) / max_signals
+def _signal_count_norm(tagged: TaggedRecord, bucket: str = "", max_signals: int = 4) -> float:
+    signals = tagged.signal_types
+    if "Predicted" in bucket:
+        signals = [s for s in signals if s != "Active RFP"]
+    return min(len(signals), max_signals) / max_signals
 
 
 def _recency_score(record: dict, today: Optional[date] = None) -> float:
@@ -243,7 +246,7 @@ def rfp_likelihood_score(tagged: TaggedRecord, today: Optional[date] = None) -> 
         return 1.0  # open Active RFP (due date in the future) = 1.0 per deck
 
     score = (
-        0.35 * _signal_count_norm(tagged)
+        0.35 * _signal_count_norm(tagged, bucket)
         + 0.30 * _recency_score(record, today)
         + 0.20 * _source_weight(tagged)
         + 0.15 * _pipeline_stage_score(bucket)
