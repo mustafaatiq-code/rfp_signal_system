@@ -64,7 +64,7 @@ Dashboard opens at **http://localhost:8501** — keep the terminal window open w
 python -m pytest tests/
 ```
 
-All 51 tests are offline-capable (no API key or network required).
+All 55 tests are offline-capable (no API key or network required).
 
 ### Deploying for GMG
 
@@ -85,13 +85,15 @@ data-refresh workflow), see **[DEPLOY.md](DEPLOY.md)**.
 | **Gwinnett County Purchasing** | `gwinnett_purchasing.py` | 4 | County bids filtered for transportation keywords |
 | **SAM.gov (federal)** | `sam_gov.py` | 4 | Federal transportation opportunities in GA + FL (needs API key) |
 | **BidNet Direct** | `bidnet_direct.py` | 3 | Cherokee, Douglas, Fulton, Clayton, Henry counties |
+| **Fulton County Schools** | `fulton_county_schools.py` | ~5 | K–12 infrastructure solicitations — E-SPLOST CEI and A&E work |
+| **BoardDocs** | `boarddocs.py` | ~3 | School board and county commission agendas — SPLOST votes, CIP approvals |
 | **ARC transportation news** | `arc_news.py` | 5 | TIP amendments, corridor studies, SPLOST votes (early signals) |
 | **Bartow County** | `bartow_county.py` | 1 | County project bids (MPO, Transit dept) |
 | **Newton County** | `newton_county.py` | 0* | CivicEngage platform — picks up bids when posted |
 
 *Newton County has no open bids at time of last run; adapter activates when new bids are posted.
 
-**Total: ~134 signals in DB, 83 flagged for GMG review (as of June 2026)**
+**Total: 171 signals in DB — 114 passed relevance gate (58 active RFPs + 56 predicted), 34 expired/closed, 23 below gate (as of July 15, 2026)**
 
 ---
 
@@ -101,10 +103,9 @@ These sources require credentials that GMG would need to provide:
 
 | Source | What's needed | Why it matters |
 |---|---|---|
-| **GDOT Professional Services portal** | GDOT Engineering Consultant Qualification | GDOT CEI/A&E RFQs for prequalified firms — highest-value opportunities |
-| **FDOT Procurement App** | FDOT vendor registration | Florida DOT project solicitations |
+| **GDOT Professional Services portal** | GDOT Engineering Consultant Qualification | GDOT CEI/A&E RFQs for prequalified firms — highest-value opportunities. Parser is built; activates the moment GMG provides credentials |
+| **FDOT Procurement App** | FDOT vendor registration | Florida DOT project solicitations; FDOT federal-aid work comes in via SAM.gov in the interim |
 | **Henry County (OpenGov)** | Cloudflare-protected — no scraping possible | Use OpenGov email subscription instead |
-| **BoardDocs** | IP-restricted from some networks | GA school board SPLOST votes; use BoardDocs email subscriptions |
 
 **Recommended next step:** GMG to initiate GDOT Engineering Consultant Qualification to unlock the prequalified-consultant portal.
 
@@ -240,7 +241,7 @@ rfp_signal_system/
 ├── output/
 │   └── dashboard.py             # Streamlit dashboard
 ├── tests/
-│   └── test_pipeline.py         # 45 regression tests (all offline-capable)
+│   └── test_pipeline.py         # 55 regression tests (all offline-capable)
 └── data/
     ├── db/opportunities.sqlite3  # Live opportunity database
     └── raw/                      # Cached fixtures for offline testing
