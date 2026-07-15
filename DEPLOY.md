@@ -63,7 +63,28 @@ same template.
 
 ## Refreshing the data
 
-Until an automated scheduler is added (planned next step), refresh is manual:
+### Automatic (default)
+
+[.github/workflows/refresh-data.yml](.github/workflows/refresh-data.yml) runs the
+live pipeline **daily** (11:00 UTC) and pushes a fresh database snapshot to
+`main`. Streamlit Cloud auto-redeploys on the push, so the dashboard stays
+current with no manual steps. You can also trigger it any time from the repo's
+**Actions** tab → *Refresh Data* → *Run workflow*.
+
+To include SAM.gov federal records in the automated refresh, add the API key as a
+repository secret: **Settings → Secrets and variables → Actions → New repository
+secret**, name `SAM_GOV_API_KEY`. Without it, SAM.gov is skipped and every other
+source still refreshes.
+
+> **Note on history:** each refresh commits the binary `.sqlite3` snapshot to
+> `main`, so history grows over time. That's an accepted trade-off for the
+> zero-infrastructure Streamlit Cloud setup. If it becomes noisy, point the
+> Streamlit app at a dedicated `data` branch and change the workflow's push
+> target to match.
+
+### Manual (fallback)
+
+If you need to publish a snapshot immediately:
 
 ```bash
 python run_pipeline.py --live
@@ -71,14 +92,6 @@ git add -f data/db/opportunities.sqlite3
 git commit -m "Refresh data snapshot $(date +%F)"
 git push
 ```
-
-Streamlit Cloud auto-redeploys on every push, so the dashboard picks up the new
-snapshot within a minute.
-
-> **Next step — automation:** a scheduled GitHub Actions job can run
-> `run_pipeline.py --live` on a cron (e.g. daily) and push the snapshot for you,
-> making refresh hands-off. Deferred for now; the manual steps above are the
-> interim workflow.
 
 ---
 

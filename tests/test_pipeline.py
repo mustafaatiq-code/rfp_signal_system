@@ -276,6 +276,77 @@ def test_gpr_returns_empty_on_network_error(monkeypatch):
     assert gpr.fetch_and_parse() == []
 
 
+# --- GDOT solicitation capture parser (auth-gated; parses a local capture) -----
+
+from ingestion.parsers import gdot_solicitation  # noqa: E402
+
+# Synthetic GDOT listing markup (NOT real data) — exercises parse_html so the
+# extraction logic is covered before real prequalified-consultant access exists.
+_SYNTHETIC_GDOT_HTML = """
+<html><body>
+<h1>Open Solicitations</h1>
+<table>
+  <tr><th>Number</th><th>Title</th><th>Due Date</th></tr>
+  <tr>
+    <td>RFQ-2026-014</td>
+    <td><a href="/solicitations/RFQ-2026-014">CEI Services for I-285 Interchange Reconstruction</a></td>
+    <td>2026-09-30</td>
+  </tr>
+  <tr>
+    <td>PI-0012345</td>
+    <td><a href="/solicitations/PI-0012345">Bridge Design &amp; Load Rating, SR-20 over Etowah River</a></td>
+    <td>10/15/2026</td>
+  </tr>
+</table>
+</body></html>
+"""
+
+
+def test_gdot_parse_html_extracts_solicitations():
+    recs = gdot_solicitation.parse_html(_SYNTHETIC_GDOT_HTML)
+    assert len(recs) == 2
+
+    cei = recs[0]
+    assert "CEI Services" in cei["title"]
+    assert cei["agency"] == "Georgia DOT"
+    assert cei["solicitation_id"] == "GDOT-RFQ-2026-014"
+    assert cei["bucket"] == "1 - Active RFP"
+    assert cei["year"] == 2026
+    assert "Due date: 2026-09-30" in cei["status_line"]
+    assert cei["source_url"].endswith("/solicitations/RFQ-2026-014")
+
+    bridge = recs[1]
+    assert "Bridge Design" in bridge["title"]
+    assert "Due date: 2026-10-15" in bridge["status_line"]  # US date normalized
+
+
+def test_gdot_parse_html_empty_on_non_listing():
+    assert gdot_solicitation.parse_html("<html><body>Sign in</body></html>") == []
+
+
+def test_gdot_fetch_and_parse_returns_empty_without_capture(monkeypatch):
+    """No capture file -> the source is a no-op that cannot affect the pipeline."""
+    from pathlib import Path
+    monkeypatch.setattr(gdot_solicitation, "CAPTURE_FILE",
+                        Path("/nonexistent/gdot_capture/page.html"))
+    from ingestion import fetcher as ft
+    from ingestion.fetcher import FetchResult
+    monkeypatch.setattr(
+        ft, "fetch_static",
+        lambda *a, **k: FetchResult(url=gdot_solicitation.PORTAL_URL, status_code=200,
+                                    html="<a href='/microsoftidentity/account/signin'>login</a>",
+                                    fetched_via="static"),
+    )
+    assert gdot_solicitation.fetch_and_parse() == []
+
+
+def test_gdot_capture_scores_as_transport():
+    recs = gdot_solicitation.parse_html(_SYNTHETIC_GDOT_HTML)
+    scored = score_all(tag_records(recs))
+    cei = next(o for o in scored if "CEI" in o.record["title"])
+    assert cei.passed_gate is True
+
+
 # --- MARTA procurement portal -------------------------------------------
 
 _SYNTHETIC_MARTA_CURRENT = """
