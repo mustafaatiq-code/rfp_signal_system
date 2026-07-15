@@ -353,7 +353,7 @@ def _fmt_signal_types(r: dict) -> str:
         return str(raw)
     bucket = str(r.get("bucket", ""))
     if "Predicted" in bucket:
-        signals = [s for s in signals if s != "Active RFP"]
+        signals = ["Anticipated RFP" if s == "Active RFP" else s for s in signals]
     return ", ".join(signals) if signals else "—"
 
 
