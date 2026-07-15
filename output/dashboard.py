@@ -229,9 +229,9 @@ with st.sidebar:
 
     st.divider()
     if _is_deployed():
+        import requests as _req, time as _time
+        token = _secret("github_token")
         if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
-            import requests as _req
-            token = _secret("github_token")
             if not token:
                 st.error("GitHub token not configured — add `github_token` to Streamlit secrets.")
             else:
@@ -242,9 +242,32 @@ with st.sidebar:
                     json={"ref": "main"},
                 )
                 if resp.status_code == 204:
-                    st.success("Pipeline triggered — data will refresh in ~2 minutes and the page will update automatically.")
+                    st.session_state["_refresh_triggered_at"] = _time.time()
                 else:
                     st.error(f"Failed to trigger pipeline ({resp.status_code}). Check the github_token secret.")
+
+        # Poll workflow status and auto-reload when done
+        triggered_at = st.session_state.get("_refresh_triggered_at")
+        if triggered_at and token:
+            elapsed = _time.time() - triggered_at
+            runs = _req.get(
+                "https://api.github.com/repos/mustafaatiq-code/rfp_signal_system/actions/runs"
+                "?workflow_id=refresh-data.yml&per_page=1",
+                headers={"Authorization": f"token {token}", "Accept": "application/vnd.github+json"},
+            ).json().get("workflow_runs", [])
+            latest = runs[0] if runs else None
+            run_started = latest and latest.get("created_at", "") > ""
+            completed = latest and latest.get("status") == "completed" and latest.get("created_at", "") >= ""
+            run_after_trigger = latest and _time.mktime(_time.strptime(latest["created_at"], "%Y-%m-%dT%H:%M:%SZ")) >= triggered_at - 5
+
+            if completed and run_after_trigger:
+                del st.session_state["_refresh_triggered_at"]
+                st.rerun()
+            else:
+                st.info("⏳ Pipeline running — page will refresh automatically when done…")
+                _time.sleep(10)
+                st.rerun()
+
         st.caption("🕐 Also refreshes automatically every day at 6 AM ET.")
     else:
         if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
