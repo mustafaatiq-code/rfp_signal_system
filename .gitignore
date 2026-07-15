@@ -21,6 +21,9 @@ venv/
 *.sqlite3
 *.db
 
+# Interactive-login captures (raw scraped HTML + browser session) — never commit
+data/raw/gdot_capture/
+
 # OS
 .DS_Store
 Thumbs.db
