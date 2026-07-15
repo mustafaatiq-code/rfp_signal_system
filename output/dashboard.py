@@ -517,7 +517,11 @@ if st.session_state.selected_id is not None:
                 "Expired RFP (past due)": 0.0, "Unknown": 0.3,
             }
             raw_signals = [s.strip() for s in str(r.get("signal_types") or "").split(",") if s.strip()]
-            n_sig = len(raw_signals)
+            display_signals = (
+                [s for s in raw_signals if s != "Active RFP"]
+                if "Predicted" in bucket_val else raw_signals
+            )
+            n_sig = len(display_signals)
             signal_norm = round(min(n_sig, 4) / 4, 4)
             try:
                 _yr = r.get("year")
@@ -530,10 +534,9 @@ if st.session_state.selected_id is not None:
                 non_rfp = [s for s in raw_signals if s != "Active RFP"]
                 source_w = round(max((_SOURCE_W.get(s, 0.3) for s in non_rfp), default=0.6) if non_rfp else 0.6, 4)
                 sw_note = (
-                    f"'Active RFP' excluded for Predicted bucket; strongest remaining signal: "
-                    f"'{max(non_rfp, key=lambda s: _SOURCE_W.get(s,0.3))}' → weight {source_w:.2f}"
+                    f"Strongest signal: '{max(non_rfp, key=lambda s: _SOURCE_W.get(s,0.3))}' → weight {source_w:.2f}"
                     if non_rfp else
-                    "Only 'Active RFP' detected — capped to 0.60 (Planning floor) for Predicted bucket"
+                    f"Planning signal floor applied → weight {source_w:.2f}"
                 )
             else:
                 source_w = round(raw_sw, 4)
@@ -542,7 +545,7 @@ if st.session_state.selected_id is not None:
             pipe_w = round(_PIPE_W.get(bucket_val, 0.3), 4)
 
             explanations = [
-                f"{n_sig} signal type(s) detected out of 4 maximum: {', '.join(raw_signals) or '—'}",
+                f"{n_sig} signal type(s) detected out of 4 maximum: {', '.join(display_signals) or '—'}",
                 f"Record from {r.get('year', '?')} — {age} year(s) old (score decays 45% per year)",
                 sw_note,
                 f"Bucket '{bucket_val}' → pipeline stage weight {pipe_w:.2f}",
